@@ -1,0 +1,44 @@
+{
+    "top_10_features": [
+        {
+            "feature": "worst perimeter",
+            "mean_abs_shap": 1.2927639484405518
+        },
+        {
+            "feature": "worst concave points",
+            "mean_abs_shap": 0.9054402112960815
+        },
+        {
+            "feature": "area error",
+            "mean_abs_shap": 0.8857601284980774
+        },
+        {
+            "feature": "worst texture",
+            "mean_abs_shap": 0.8459362983703613
+        },
+        {
+            "feature": "worst radius",
+            "mean_abs_shap": 0.7692497372627258
+        },
+        {
+            "feature": "worst area",
+            "mean_abs_shap": 0.7141834497451782
+        },
+        {
+            "feature": "mean concave points",
+            "mean_abs_shap": 0.5594214797019958
+        },
+        {
+            "feature": "compactness error",
+            "mean_abs_shap": 0.5185049176216125
+        },
+        {
+            "feature": "mean smoothness",
+            "mean_abs_shap": 0.4369760751724243
+        },
+        {
+            "feature": "worst symmetry",
+            "mean_abs_shap": 0.4233403503894806
+        }
+    ]
+}

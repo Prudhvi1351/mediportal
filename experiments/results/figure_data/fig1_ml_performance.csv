@@ -1,0 +1,5 @@
+,Accuracy,Precision,Recall,F1
+Logistic Regression,97.37,100.0,92.86,96.3
+Random Forest,97.37,100.0,92.86,96.3
+XGBoost,96.49,100.0,90.48,95.0
+MLP,97.37,100.0,92.86,96.3

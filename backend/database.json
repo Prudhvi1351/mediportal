@@ -1,0 +1,33 @@
+{
+    "patient_counter": 2,
+    "patients": {
+        "PAT-0001": {
+            "profile": {
+                "full_name": "Prudhvi A M",
+                "email": "aprudhviii@gmail.com",
+                "password": "Prudhvi6963@",
+                "age": 21,
+                "dob": "2005-02-27",
+                "gender": "Male",
+                "blood_group": "O+",
+                "address": "No43, 1st Main , 1st Cross kakathiya nagar"
+            },
+            "records": []
+        },
+        "PAT-0002": {
+            "profile": {
+                "full_name": "Prudhvi A M",
+                "email": "aprudhviii@gmail.com",
+                "password": "Prudhvi6963@",
+                "age": 54,
+                "dob": "2026-08-14",
+                "gender": "Male",
+                "blood_group": "O-",
+                "address": "No43, 1st Main , 1st Cross kakathiya nagar",
+                "emergency_contact": "23456789096543"
+            },
+            "records": []
+        }
+    },
+    "doctors": {}
+}

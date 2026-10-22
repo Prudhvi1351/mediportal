@@ -1,0 +1,30 @@
+{
+    "IPFS_Latency": {
+        "10KB": {
+            "encryption_ms": 8.30388069152832,
+            "upload_ms": 6.1359405517578125,
+            "total_ms": 14.439821243286133
+        },
+        "1MB": {
+            "encryption_ms": 3.9649009704589844,
+            "upload_ms": 500.34403800964355,
+            "total_ms": 504.30893898010254
+        },
+        "5MB": {
+            "encryption_ms": 22.34816551208496,
+            "upload_ms": 2501.6870498657227,
+            "total_ms": 2524.0352153778076
+        }
+    },
+    "Blockchain_Performance": {
+        "TPS": 142.5
+    },
+    "Anomaly_Detection": {
+        "Valid_Access_Attempts": 50,
+        "Valid_Success": 50,
+        "Malicious_Attempts": 10,
+        "Malicious_Blocked": 10,
+        "Detection_Rate": "100.0%",
+        "False_Positive_Rate": "0.0%"
+    }
+}

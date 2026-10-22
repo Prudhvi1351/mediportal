@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+web3
+pycryptodome
+requests
+
+python-dotenv
+sqlalchemy
+pymysql
+bcrypt
+python-jose
+python-multipart

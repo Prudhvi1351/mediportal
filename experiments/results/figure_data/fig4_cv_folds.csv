@@ -1,0 +1,6 @@
+,Logistic Regression,Random Forest,XGBoost,MLP
+Fold 1,94.51,95.6,96.7,95.6
+Fold 2,98.9,98.9,97.8,97.8
+Fold 3,94.51,94.51,95.6,98.9
+Fold 4,95.6,96.7,96.7,97.8
+Fold 5,97.8,96.7,98.9,97.8

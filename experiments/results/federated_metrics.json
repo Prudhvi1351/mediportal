@@ -1,0 +1,6 @@
+{
+    "Centralized_Accuracy": 0.9824561403508771,
+    "Federated_Global_Accuracy": 0.9824561403508771,
+    "Accuracy_Loss": 0.0,
+    "Num_Clients": 3
+}

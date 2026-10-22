@@ -1,0 +1,7 @@
+Component,Status,Implementation_Evidence,Experimental_Result,Notes
+Blockchain ledger,Simulated,Local Hardhat EVM / Python Array,Validated locally,Not a live public mainnet
+Consensus (PBFT/PoA),Simulated,Algorithmic delay injection,Linear degradation observed,Approximates network messaging overhead
+IPFS Off-chain storage,Experimentally implemented,Pinata REST API / Mock Latency,Validated latency curve,Shows $O(n)$ scaling with payload size
+Smart contract,Experimentally implemented,Solidity RBAC deployment,Validated access logic,Tested via local RPC
+Transaction integrity,Experimentally implemented,SHA-256 state checks,Tampering Detected: True,Immutable hash verification passed
+DID (Decentralized ID),Conceptual/proposed only,None,N/A,Requires future integration with ABHA/W3C standards

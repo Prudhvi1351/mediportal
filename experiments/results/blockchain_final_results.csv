@@ -1,0 +1,7 @@
+Metric,Configuration,Mean,SD,95% CI,Interpretation
+Throughput (4 nodes),4 Nodes,252.88343187126972,11.766293102278421,"[251.3, 254.5]",Baseline max TPS
+Throughput (20 nodes),20 Nodes,238.63195053405113,11.304767249059541,"[237.1, 240.2]",Degradation of 5.6%
+Storage Latency (1 KB),1 KB,139.77851568896796,11.370947261788828,"[138.2, 141.4]",Minimal payload latency
+Storage Latency (50 KB),50 KB,250.8639019763696,19.432959102998222,"[248.2, 253.6]",Increased by 79.5%
+Scalability Trend,TPS Drop,5.635593139400808,N/A,N/A,Nonlinear degradation characteristic of PBFT
+Integrity Test,Hash Tampering,N/A,N/A,N/A,Not experimentally validated

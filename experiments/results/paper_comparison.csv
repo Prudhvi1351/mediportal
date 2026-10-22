@@ -1,0 +1,21 @@
+Model,Metric,Reproduced,Paper,Difference
+Logistic Regression,Accuracy,0.9737,0.965,0.0087
+Logistic Regression,Precision,1.0,0.975,0.025
+Logistic Regression,Recall,0.9286,0.929,-0.0004
+Logistic Regression,F1,0.963,0.951,0.012
+Logistic Regression,AUC,0.998,0.996,0.002
+Random Forest,Accuracy,0.9737,0.974,-0.0003
+Random Forest,Precision,1.0,1.0,0.0
+Random Forest,Recall,0.9286,0.929,-0.0004
+Random Forest,F1,0.963,0.963,-0.0
+Random Forest,AUC,0.9929,0.995,-0.0021
+XGBoost,Accuracy,0.9649,0.965,-0.0001
+XGBoost,Precision,1.0,1.0,0.0
+XGBoost,Recall,0.9048,0.905,-0.0002
+XGBoost,F1,0.95,0.95,0.0
+XGBoost,AUC,0.9904,0.993,-0.0026
+MLP,Accuracy,0.9737,0.965,0.0087
+MLP,Precision,1.0,1.0,0.0
+MLP,Recall,0.9286,0.905,0.0236
+MLP,F1,0.963,0.95,0.013
+MLP,AUC,0.9914,0.993,-0.0016

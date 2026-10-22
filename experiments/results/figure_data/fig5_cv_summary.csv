@@ -1,0 +1,5 @@
+,Mean,SD
+Logistic Regression,96.26,1.79
+Random Forest,96.48,1.46
+XGBoost,97.14,1.1199999999999999
+MLP,97.58,1.08
