@@ -1,6 +1,8 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, BackgroundTasks, Body
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Dict, Any, Optional, List
 import os
 import random
 import time
@@ -632,3 +634,34 @@ def anchor_diagnosis(request: AnchorDiagnosisRequest, db: Session = Depends(get_
         "tx_hash": tx_hash.hex(),
         "block_number": receipt.blockNumber
     }
+
+# --- Explainable AI (XAI) Diagnostic Prediction Endpoint ---
+try:
+    from ml_pipeline.scripts.inference_engine import predict_patient_risk
+except ImportError:
+    from backend.ml_pipeline.scripts.inference_engine import predict_patient_risk
+
+@app.post("/api/predict")
+@app.post("/api/v1/predict")
+def predict_clinical_risk(
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(auth.get_current_user)
+):
+    if getattr(current_user, "role", None) != "DOCTOR":
+        raise HTTPException(
+            status_code=403, 
+            detail="Forbidden: Clinical Diagnostic AI is strictly restricted to authorized medical practitioners."
+        )
+
+    try:
+        result = predict_patient_risk(payload)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference pipeline execution error: {str(e)}")
+
+    if result.get("status") == "error" or result.get("anomaly_detected") is True:
+        return JSONResponse(status_code=400, content=result)
+
+    return result
+

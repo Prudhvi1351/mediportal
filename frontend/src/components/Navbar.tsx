@@ -71,6 +71,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             Doctor Portal
           </button>
+          <a
+            href="/doctor/diagnosis"
+            id="nav-ai-diagnosis-link"
+            className="px-3 py-1 rounded-lg transition-colors text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40 border border-cyan-800/50 flex items-center gap-1 font-mono text-xs"
+          >
+            <span>🔬</span> AI Diagnosis
+          </a>
         </div>
       </div>
 

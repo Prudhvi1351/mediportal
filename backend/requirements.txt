@@ -4,10 +4,17 @@ pydantic
 web3
 pycryptodome
 requests
-
 python-dotenv
 sqlalchemy
 pymysql
 bcrypt
 python-jose
 python-multipart
+
+# Machine Learning Backbone
+scikit-learn
+pandas
+numpy
+xgboost
+shap
+joblib

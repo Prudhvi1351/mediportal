@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ClinicalDiagnosisView } from './ClinicalDiagnosisView';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -17,6 +18,7 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   doctorToken,
   setDoctorToken
 }) => {
+  const [activeSection, setActiveSection] = useState<'records' | 'diagnosis'>('records');
   const [showDocReg, setShowDocReg] = useState(false);
   const [showDocLogin, setShowDocLogin] = useState(false);
   const [showFetch, setShowFetch] = useState(false);
@@ -104,25 +106,72 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mt-6 animate-fade-in">
-      <button onClick={() => setCurrentView('landing')} className="text-gray-400 hover:text-white mb-6">← Back to Portal Select</button>
-      <div className="card-bg p-8 rounded-2xl mb-8 border-t-4 border-t-[#38bdf8]">
-        <h2 className="text-3xl font-bold text-white mb-2">Clinical Portal</h2>
-        <p className="text-gray-400 mb-6">Requires verified Medical License and Admin Approval.</p>
-        <div className="flex gap-4 mb-8">
-          {!activeDoctorId && (
-            <>
-              <button onClick={() => setShowDocReg(true)} className="bg-transparent border border-[#38bdf8] text-[#38bdf8] hover:bg-[#38bdf8]/10 px-6 py-2 rounded-lg font-bold">Register (Upload License)</button>
-              <button onClick={() => setShowDocLogin(true)} className="bg-[#38bdf8] text-[#0a0f1d] px-6 py-2 rounded-lg font-bold">Doctor Login</button>
-            </>
-          )}
-          {activeDoctorId && (
-            <>
-              <button onClick={() => setShowFetch(true)} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold">Fetch Patient EHR</button>
-              <button onClick={() => setShowBreakGlass(true)} className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold">Emergency Break-Glass</button>
-            </>
-          )}
+    <div className="w-full max-w-5xl mt-6 animate-fade-in">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <button onClick={() => setCurrentView('landing')} className="text-gray-400 hover:text-white text-sm">
+          ← Back to Portal Select
+        </button>
+
+        {/* Section Switcher Tabs */}
+        <div className="flex bg-[#0c1322] border border-gray-800 p-1 rounded-xl font-mono text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveSection('records')}
+            id="doctor-records-tab"
+            className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+              activeSection === 'records'
+                ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            📋 Patient Records & Decryption
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection('diagnosis')}
+            id="doctor-diagnosis-tab"
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+              activeSection === 'diagnosis'
+                ? 'bg-purple-500/25 text-purple-300 font-bold border border-purple-500/50'
+                : 'text-purple-400 hover:text-purple-200'
+            }`}
+          >
+            <span>🔬</span> AI Oncology Diagnosis & XAI
+          </button>
         </div>
+      </div>
+
+      {activeSection === 'diagnosis' ? (
+        <ClinicalDiagnosisView 
+          initialDoctorId={activeDoctorId}
+          initialDoctorToken={doctorToken}
+          onBackToPortal={() => setActiveSection('records')}
+        />
+      ) : (
+        <div className="card-bg p-8 rounded-2xl mb-8 border-t-4 border-t-[#38bdf8]">
+          <h2 className="text-3xl font-bold text-white mb-2">Clinical Portal</h2>
+          <p className="text-gray-400 mb-6">Requires verified Medical License and Admin Approval.</p>
+          <div className="flex flex-wrap gap-4 mb-8">
+            {!activeDoctorId && (
+              <>
+                <button onClick={() => setShowDocReg(true)} className="bg-transparent border border-[#38bdf8] text-[#38bdf8] hover:bg-[#38bdf8]/10 px-6 py-2 rounded-lg font-bold">Register (Upload License)</button>
+                <button onClick={() => setShowDocLogin(true)} className="bg-[#38bdf8] text-[#0a0f1d] px-6 py-2 rounded-lg font-bold">Doctor Login</button>
+              </>
+            )}
+            {activeDoctorId && (
+              <>
+                <button onClick={() => setShowFetch(true)} className="bg-purple-600 text-white px-6 py-2 rounded-lg font-bold">Fetch Patient EHR</button>
+                <button onClick={() => setShowBreakGlass(true)} className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold">Emergency Break-Glass</button>
+                <button 
+                  onClick={() => setActiveSection('diagnosis')} 
+                  id="doctor-quick-ai-btn"
+                  className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"
+                >
+                  <span>🔬</span> Launch Diagnostic AI
+                </button>
+              </>
+            )}
+          </div>
 
         {patientData && (
           <div className="bg-gray-800/50 p-6 rounded-xl border border-gray-700 mt-6">
@@ -176,7 +225,8 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {showDocReg && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
