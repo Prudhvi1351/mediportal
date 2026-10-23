@@ -361,3 +361,170 @@ MediPortal Administration
     </html>
     """
     return send_email(to_email, subject, html_body, text_body)
+
+
+def send_password_reset_code_email(email_info: dict) -> Tuple[bool, str]:
+    """
+    Send OTP code email for password recovery.
+    """
+    to_email = email_info.get("email", "")
+    full_name = email_info.get("full_name", "User")
+    user_id = email_info.get("user_id", "N/A")
+    user_type = email_info.get("user_type", "PATIENT") # PATIENT or DOCTOR
+    code = email_info.get("code", "000000")
+    expires_minutes = email_info.get("expires_minutes", 15)
+
+    role_label = "Doctor" if user_type == "DOCTOR" else "Patient"
+    accent_color = "#38bdf8" if user_type == "DOCTOR" else "#00f2fe"
+
+    subject = f"MediPortal Security: Your Password Reset Verification Code [{code}]"
+
+    text_body = f"""Hello {full_name},
+
+A password reset request was initiated for your MediPortal {role_label} account.
+
+YOUR 6-DIGIT VERIFICATION CODE:
+========================================
+             {code}
+========================================
+
+Account ID: {user_id}
+Role: {role_label}
+Expiration: {expires_minutes} minutes
+
+Enter this verification code on the password reset screen along with your new password.
+
+SECURITY WARNING:
+If you did not request this password reset, please ignore this email. Your current password remains secure.
+
+Best regards,
+MediPortal Healthcare Security
+"""
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #070b14; color: #e2e8f0; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background: #0c1222; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }}
+        .header {{ background: linear-gradient(135deg, #0f172a, #0c1222); padding: 32px 24px; text-align: center; border-bottom: 1px solid #1e293b; }}
+        .logo {{ color: {accent_color}; font-size: 24px; font-weight: 800; margin: 0; }}
+        .badge {{ display: inline-block; background: rgba(0,242,254,0.12); color: {accent_color}; border: 1px solid rgba(0,242,254,0.3); border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-top: 10px; }}
+        .content {{ padding: 32px 24px; }}
+        .code-box {{ background: #131b2e; border: 2px dashed {accent_color}; border-radius: 14px; padding: 24px 20px; text-align: center; margin: 24px 0; }}
+        .details-table {{ width: 100%; border-collapse: collapse; margin-top: 16px; }}
+        .details-table td {{ padding: 10px 12px; border-bottom: 1px solid #1e293b; font-size: 14px; }}
+        .label-col {{ color: #94a3b8; width: 40%; }}
+        .value-col {{ color: #f8fafc; font-weight: 600; }}
+        .footer {{ background: #070b14; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #1e293b; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1 class="logo">MEDIPORTAL</h1>
+          <div class="badge">Password Reset Request</div>
+        </div>
+        <div class="content">
+          <h2 style="color: #ffffff; margin-top: 0;">Hello, {full_name}</h2>
+          <p style="color: #94a3b8; line-height: 1.6;">
+            We received a request to reset the password for your MediPortal <strong>{role_label}</strong> account. Please use the verification code below to authorize your password update:
+          </p>
+
+          <div class="code-box">
+            <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px; font-weight: 700;">Your 6-Digit Verification Code</div>
+            <div style="font-size: 42px; font-weight: 900; color: {accent_color}; letter-spacing: 8px; font-family: monospace; margin: 12px 0;">{code}</div>
+            <div style="font-size: 12px; color: #f59e0b; font-weight: 600;">⏱️ Valid for {expires_minutes} minutes</div>
+          </div>
+
+          <table class="details-table">
+            <tr><td class="label-col">Account ID</td><td class="value-col" style="font-family: monospace;">{user_id}</td></tr>
+            <tr><td class="label-col">Account Role</td><td class="value-col">{role_label}</td></tr>
+            <tr><td class="label-col">Registered Email</td><td class="value-col">{to_email}</td></tr>
+          </table>
+
+          <div style="margin-top: 24px; padding: 14px 18px; border-radius: 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; font-size: 12px; line-height: 1.5;">
+            <strong>Security Notice:</strong> If you did not request this verification code, please ignore this email. Your current password remains completely unchanged and secure.
+          </div>
+        </div>
+        <div class="footer">
+          &copy; 2026 MediPortal Decentralized Healthcare Security.
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    return send_email(to_email, subject, html_body, text_body)
+
+
+def send_password_reset_success_email(email_info: dict) -> Tuple[bool, str]:
+    """
+    Send confirmation email after password has been successfully updated.
+    """
+    to_email = email_info.get("email", "")
+    full_name = email_info.get("full_name", "User")
+    user_id = email_info.get("user_id", "N/A")
+    user_type = email_info.get("user_type", "PATIENT")
+
+    role_label = "Doctor" if user_type == "DOCTOR" else "Patient"
+    subject = f"MediPortal Security: Password Successfully Changed [{user_id}]"
+
+    text_body = f"""Hello {full_name},
+
+This email confirms that the password for your MediPortal {role_label} account ({user_id}) was successfully reset.
+
+If you made this change, no further action is required and you may log in with your new password.
+
+If you did NOT authorize this change, please contact your hospital or security administrator immediately.
+
+Best regards,
+MediPortal Healthcare Security
+"""
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #070b14; color: #e2e8f0; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background: #0c1222; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #064e3b, #0c1222); padding: 32px 24px; text-align: center; border-bottom: 1px solid #1e293b; }}
+        .logo {{ color: #10b981; font-size: 24px; font-weight: 800; margin: 0; }}
+        .badge {{ display: inline-block; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-top: 10px; }}
+        .content {{ padding: 32px 24px; }}
+        .footer {{ background: #070b14; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #1e293b; }}
+        .btn {{ display: inline-block; background: #10b981; color: #070b14 !important; font-weight: 700; text-decoration: none; padding: 12px 26px; border-radius: 8px; margin-top: 20px; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1 class="logo">MEDIPORTAL</h1>
+          <div class="badge">Password Reset Complete</div>
+        </div>
+        <div class="content">
+          <h2 style="color: #ffffff; margin-top: 0;">Password Successfully Changed</h2>
+          <p style="color: #94a3b8; line-height: 1.6;">
+            Hello <strong>{full_name}</strong>, the password for your MediPortal <strong>{role_label}</strong> account (<code style="color: #38bdf8;">{user_id}</code>) was successfully updated.
+          </p>
+
+          <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 16px; margin: 20px 0; color: #6ee7b7; font-size: 13px;">
+            ✓ Your credentials have been refreshed. You can now log in securely using your new password.
+          </div>
+
+          <div style="text-align: center;">
+            <a href="http://localhost:3000" class="btn">Proceed to Login</a>
+          </div>
+        </div>
+        <div class="footer">
+          &copy; 2026 MediPortal Decentralized Healthcare Security.
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    return send_email(to_email, subject, html_body, text_body)
+

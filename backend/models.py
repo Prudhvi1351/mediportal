@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from database import Base
 
 class Patient(Base):
@@ -59,3 +60,16 @@ class EHRRecord(Base):
     timestamp = Column(String(100))
 
     patient = relationship("Patient", back_populates="records")
+
+class PasswordResetCode(Base):
+    __tablename__ = "password_reset_codes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_type = Column(String(20), index=True) # "PATIENT" or "DOCTOR"
+    user_id = Column(String(50), index=True)   # patient_id or doctor_id
+    email = Column(String(255), index=True)
+    code = Column(String(10), index=True)      # 6-digit random code
+    expires_at = Column(DateTime)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

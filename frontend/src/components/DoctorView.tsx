@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClinicalDiagnosisView } from './ClinicalDiagnosisView';
 import { GeneralDiseaseAiView } from './GeneralDiseaseAiView';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -23,6 +24,7 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   const [selectedRecordForAi, setSelectedRecordForAi] = useState<any>(null);
   const [showDocReg, setShowDocReg] = useState(false);
   const [showDocLogin, setShowDocLogin] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [showFetch, setShowFetch] = useState(false);
   const [showBreakGlass, setShowBreakGlass] = useState(false);
   const [fetchInput, setFetchInput] = useState("");
@@ -559,14 +561,38 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
             <form onSubmit={handleLogin} className="space-y-4">
               <input required placeholder="DOC-XXXXX" className="input-dark w-full p-2 rounded" onChange={e => setLoginForm({ ...loginForm, doctor_id: e.target.value })} />
               <input required placeholder="Password" type="password" className="input-dark w-full p-2 rounded" onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} />
-              <div className="flex justify-end gap-2">
+              
+              <div className="flex justify-between items-center text-xs pt-1">
+                <button
+                  type="button"
+                  id="doctor-forgot-password-link"
+                  onClick={() => {
+                    setShowDocLogin(false);
+                    setShowForgotPasswordModal(true);
+                  }}
+                  className="text-sky-400 hover:text-sky-300 font-mono underline cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowDocLogin(false)} className="text-gray-400">Cancel</button>
-                <button type="submit" className="bg-[#38bdf8] text-[#0a0f1d] px-4 py-2 rounded font-bold">Login</button>
+                <button type="submit" className="bg-[#38bdf8] text-[#0a0f1d] px-4 py-2 rounded font-bold cursor-pointer">Login</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Forgot Password Reset Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+        initialRole="DOCTOR"
+        initialIdentifier={loginForm.doctor_id}
+        onOpenLogin={() => setShowDocLogin(true)}
+      />
 
       {showFetch && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">

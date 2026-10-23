@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { GeneralDiseaseAiView } from './GeneralDiseaseAiView';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -165,6 +166,7 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
 
   // Doctor login modal state if not logged in
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [loginId, setLoginId] = useState("DOC-14288");
   const [loginPassword, setLoginPassword] = useState("Doctor@123");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -908,18 +910,32 @@ Report digitally encrypted and anchored into Patient EHR Vault on Blockchain.
                 />
               </div>
 
+              <div className="flex justify-between items-center text-xs pt-1">
+                <button
+                  type="button"
+                  id="clinical-forgot-password-link"
+                  onClick={() => {
+                    setShowLoginModal(false);
+                    setShowForgotPasswordModal(true);
+                  }}
+                  className="text-cyan-400 hover:text-cyan-300 font-mono underline cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowLoginModal(false)}
-                  className="text-xs font-mono text-gray-400 hover:text-white px-3 py-2"
+                  className="text-xs font-mono text-gray-400 hover:text-white px-3 py-2 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   id="modal-doctor-login-btn"
-                  className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold font-mono text-xs px-5 py-2 rounded-lg transition-colors"
+                  className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold font-mono text-xs px-5 py-2 rounded-lg transition-colors cursor-pointer"
                 >
                   Authorize
                 </button>
@@ -928,6 +944,15 @@ Report digitally encrypted and anchored into Patient EHR Vault on Blockchain.
           </div>
         </div>
       )}
+
+      {/* Forgot Password Reset Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+        initialRole="DOCTOR"
+        initialIdentifier={loginId}
+        onOpenLogin={() => setShowLoginModal(true)}
+      />
 
       {/* Patient ID Prompt Modal for Biopsy Diagnosis Upload */}
       {showUploadModal && (

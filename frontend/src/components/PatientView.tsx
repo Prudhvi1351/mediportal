@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -45,6 +46,7 @@ export const PatientView: React.FC<PatientViewProps> = ({
 }) => {
   const [showRegModal, setShowRegModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [grantDocId, setGrantDocId] = useState("");
@@ -730,14 +732,38 @@ export const PatientView: React.FC<PatientViewProps> = ({
             <form onSubmit={handleLogin} className="space-y-4">
               <input required placeholder="Patient ID (e.g. P20A0105I)" className="input-dark w-full p-2 rounded" onChange={e=>setLoginForm({...loginForm, patient_id: e.target.value})}/>
               <input required placeholder="Password" type="password" className="input-dark w-full p-2 rounded" onChange={e=>setLoginForm({...loginForm, password: e.target.value})}/>
-              <div className="flex justify-end gap-2">
+              
+              <div className="flex justify-between items-center text-xs pt-1">
+                <button
+                  type="button"
+                  id="patient-forgot-password-link"
+                  onClick={() => {
+                    setShowLoginModal(false);
+                    setShowForgotPasswordModal(true);
+                  }}
+                  className="text-cyan-400 hover:text-cyan-300 font-mono underline cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={()=>setShowLoginModal(false)} className="text-gray-400">Cancel</button>
-                <button type="submit" className="bg-[#00f2fe] text-[#0a0f1d] px-4 py-2 rounded font-bold">Login</button>
+                <button type="submit" className="bg-[#00f2fe] text-[#0a0f1d] px-4 py-2 rounded font-bold cursor-pointer">Login</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Forgot Password Reset Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+        initialRole="PATIENT"
+        initialIdentifier={loginForm.patient_id}
+        onOpenLogin={() => setShowLoginModal(true)}
+      />
       
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">

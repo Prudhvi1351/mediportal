@@ -17,7 +17,7 @@ import hashlib
 import joblib
 import numpy as np
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import engine, Base, get_db
 import models
@@ -100,6 +100,28 @@ class AnchorDiagnosisRequest(BaseModel):
     diagnosis: str
     probability: float
     diagnosis_hash: str
+
+class ForgotPasswordRequest(BaseModel):
+    user_type: str # "PATIENT" or "DOCTOR"
+    identifier: str # patient_id, doctor_id, or email
+
+class ResetPasswordRequest(BaseModel):
+    user_type: str # "PATIENT" or "DOCTOR"
+    identifier: str # patient_id, doctor_id, or email
+    code: str
+    new_password: str
+
+def mask_email(email: str) -> str:
+    if not email or "@" not in email:
+        return "your registered email"
+    parts = email.split("@")
+    user = parts[0]
+    domain = parts[1]
+    if len(user) <= 2:
+        masked_user = user[0] + "***"
+    else:
+        masked_user = user[0] + "***" + user[-1]
+    return f"{masked_user}@{domain}"
 
 def generate_patient_id(full_name: str, dob_str: str) -> str:
     """
@@ -656,6 +678,179 @@ def login_doctor(doctor_id: str = Form(...), password: str = Form(...), db: Sess
         "license_number": doctor.license_number
     }
     return {"access_token": access_token, "token_type": "bearer", "doctor_id": doctor_id, "status": "logged_in", "profile": profile}
+
+# --- Password Reset & Recovery (Patient & Doctor) ---
+@app.post("/api/v1/auth/forgot-password")
+def request_password_reset(
+    req: ForgotPasswordRequest, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db)
+):
+    user_type = req.user_type.strip().upper()
+    identifier = req.identifier.strip()
+    if user_type not in ["PATIENT", "DOCTOR"]:
+        raise HTTPException(status_code=400, detail="Invalid user_type. Must be 'PATIENT' or 'DOCTOR'")
+
+    user = None
+    if user_type == "PATIENT":
+        user = db.query(models.Patient).filter(
+            (models.Patient.patient_id == identifier) | (models.Patient.email == identifier)
+        ).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"No Patient account found for '{identifier}'")
+        user_id = user.patient_id
+    else:
+        user = db.query(models.Doctor).filter(
+            (models.Doctor.doctor_id == identifier) | (models.Doctor.email == identifier)
+        ).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"No Doctor account found for '{identifier}'")
+        user_id = user.doctor_id
+
+    # Generate cryptographically secure 6-digit random code
+    random_code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    # Invalidate previous unused codes for this user
+    db.query(models.PasswordResetCode).filter(
+        models.PasswordResetCode.user_type == user_type,
+        models.PasswordResetCode.user_id == user_id,
+        models.PasswordResetCode.is_used == False
+    ).update({"is_used": True})
+
+    # Save new reset entry
+    reset_entry = models.PasswordResetCode(
+        user_type=user_type,
+        user_id=user_id,
+        email=user.email,
+        code=random_code,
+        expires_at=expires_at,
+        is_used=False
+    )
+    db.add(reset_entry)
+    db.commit()
+
+    # Trigger email via background task
+    background_tasks.add_task(mailer.send_password_reset_code_email, {
+        "email": user.email,
+        "full_name": user.full_name,
+        "user_id": user_id,
+        "user_type": user_type,
+        "code": random_code,
+        "expires_minutes": 15
+    })
+
+    return {
+        "status": "success",
+        "message": f"Verification code has been dispatched to {mask_email(user.email)}",
+        "user_id": user_id,
+        "user_type": user_type,
+        "masked_email": mask_email(user.email),
+        "expires_in_minutes": 15
+    }
+
+@app.post("/api/v1/auth/reset-password")
+def reset_password(
+    req: ResetPasswordRequest, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db)
+):
+    user_type = req.user_type.strip().upper()
+    identifier = req.identifier.strip()
+    code = req.code.strip()
+    new_password = req.new_password
+
+    if user_type not in ["PATIENT", "DOCTOR"]:
+        raise HTTPException(status_code=400, detail="Invalid user_type. Must be 'PATIENT' or 'DOCTOR'")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+
+    # Find matching unused code
+    reset_entry = db.query(models.PasswordResetCode).filter(
+        models.PasswordResetCode.user_type == user_type,
+        (models.PasswordResetCode.user_id == identifier) | (models.PasswordResetCode.email == identifier),
+        models.PasswordResetCode.code == code,
+        models.PasswordResetCode.is_used == False
+    ).order_by(models.PasswordResetCode.id.desc()).first()
+
+    if not reset_entry:
+        raise HTTPException(status_code=400, detail="Invalid verification code or code has already been used. Please request a new code.")
+
+    if reset_entry.expires_at < datetime.utcnow():
+        reset_entry.is_used = True
+        db.commit()
+        raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new code.")
+
+    # Locate user and update password
+    target_user = None
+    if user_type == "PATIENT":
+        target_user = db.query(models.Patient).filter(models.Patient.patient_id == reset_entry.user_id).first()
+    else:
+        target_user = db.query(models.Doctor).filter(models.Doctor.doctor_id == reset_entry.user_id).first()
+
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Associated user account could not be found.")
+
+    new_hash = auth.get_password_hash(new_password)
+    target_user.password_hash = new_hash
+    reset_entry.is_used = True
+    db.commit()
+
+    # Trigger password change confirmation email
+    background_tasks.add_task(mailer.send_password_reset_success_email, {
+        "email": target_user.email,
+        "full_name": target_user.full_name,
+        "user_id": reset_entry.user_id,
+        "user_type": user_type
+    })
+
+    return {
+        "status": "success",
+        "message": f"Password reset successfully for {user_type.title()} ({reset_entry.user_id}). You can now log in with your new password.",
+        "user_id": reset_entry.user_id
+    }
+
+# Role-specific convenience aliases
+@app.post("/api/v1/patient/forgot-password")
+def patient_forgot_password(
+    identifier: str = Form(...), 
+    background_tasks: BackgroundTasks = None, 
+    db: Session = Depends(get_db)
+):
+    req = ForgotPasswordRequest(user_type="PATIENT", identifier=identifier)
+    return request_password_reset(req, background_tasks, db)
+
+@app.post("/api/v1/patient/reset-password")
+def patient_reset_password(
+    identifier: str = Form(...),
+    code: str = Form(...),
+    new_password: str = Form(...),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    req = ResetPasswordRequest(user_type="PATIENT", identifier=identifier, code=code, new_password=new_password)
+    return reset_password(req, background_tasks, db)
+
+@app.post("/api/v1/doctor/forgot-password")
+def doctor_forgot_password(
+    identifier: str = Form(...), 
+    background_tasks: BackgroundTasks = None, 
+    db: Session = Depends(get_db)
+):
+    req = ForgotPasswordRequest(user_type="DOCTOR", identifier=identifier)
+    return request_password_reset(req, background_tasks, db)
+
+@app.post("/api/v1/doctor/reset-password")
+def doctor_reset_password(
+    identifier: str = Form(...),
+    code: str = Form(...),
+    new_password: str = Form(...),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    req = ResetPasswordRequest(user_type="DOCTOR", identifier=identifier, code=code, new_password=new_password)
+    return reset_password(req, background_tasks, db)
 
 # --- Doctor & Patient Data Access ---
 @app.get("/api/v1/ehr/{patient_id}")
