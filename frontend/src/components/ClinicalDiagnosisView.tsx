@@ -138,17 +138,30 @@ interface AnomalyError {
 interface ClinicalDiagnosisViewProps {
   initialDoctorId?: string | null;
   initialDoctorToken?: string | null;
+  activePatientId?: string | null;
+  onDiagnosisUploaded?: () => void;
   onBackToPortal?: () => void;
 }
 
 export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
   initialDoctorId,
   initialDoctorToken,
+  activePatientId = null,
+  onDiagnosisUploaded,
   onBackToPortal
 }) => {
   const [doctorId, setDoctorId] = useState<string | null>(initialDoctorId || null);
   const [doctorToken, setDoctorToken] = useState<string | null>(initialDoctorToken || null);
   const [aiMode, setAiMode] = useState<'general' | 'biopsy'>('general');
+
+  // EHR Upload state
+  const [isUploadingToEHR, setIsUploadingToEHR] = useState(false);
+  const [targetPatientId, setTargetPatientId] = useState(activePatientId || "");
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  useEffect(() => {
+    if (activePatientId) setTargetPatientId(activePatientId);
+  }, [activePatientId]);
 
   // Doctor login modal state if not logged in
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -296,6 +309,91 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
       setGeneralError(err.message || "Network error contacting inference engine.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleUploadDiagnosisToEHR = async (pidOverride?: string) => {
+    if (!predictionResult) return;
+    const pid = pidOverride || targetPatientId || activePatientId;
+    if (!pid || !pid.trim()) {
+      setShowUploadModal(true);
+      return;
+    }
+    if (!doctorToken) {
+      alert("Doctor authorization token missing. Please authenticate first.");
+      setShowLoginModal(true);
+      return;
+    }
+
+    setIsUploadingToEHR(true);
+    try {
+      const topReasonsText = predictionResult.top_3_shap_reasons.map(r =>
+        `Rank #${r.rank}: ${r.feature.toUpperCase()}\n` +
+        `  Measured Patient Value: ${r.patient_value}\n` +
+        `  SHAP Risk Contribution: ${r.shap_impact > 0 ? '+' : ''}${r.shap_impact}\n` +
+        `  Clinical Significance: "${r.description}"`
+      ).join("\n\n");
+
+      const reportContent = 
+`========================================================================
+CELL BIOPSY ONCOLOGY AI DIAGNOSTIC REPORT (FINE-NEEDLE ASPIRATE)
+========================================================================
+Patient ID: ${pid.trim()}
+Consulting Doctor: ${doctorId || "Authorized Medical Practitioner"}
+Timestamp: ${new Date().toISOString()}
+Security Protocol: AES-256-CBC Encrypted & Hardhat Smart Contract Anchored
+Model Architecture: Random Forest Classifier + SHAP TreeExplainer
+
+------------------------------------------------------------------------
+DIAGNOSTIC ASSESSMENT & MALIGNANCY PROFILE
+------------------------------------------------------------------------
+Diagnosis: ${predictionResult.diagnosis.toUpperCase()}
+Malignancy Risk Score: ${predictionResult.risk_score} (Probability: ${(predictionResult.risk_probability * 100).toFixed(2)}%)
+Diagnostic Confidence: ${predictionResult.confidence}
+Anomaly Integrity Score: +${predictionResult.anomaly_score} (Isolation Forest Verified)
+
+------------------------------------------------------------------------
+TOP 3 SHAP BIOMARKER CONTRIBUTING FACTORS (EXPLAINABLE AI)
+------------------------------------------------------------------------
+${topReasonsText}
+
+------------------------------------------------------------------------
+CLINICAL RECOMMENDATION
+------------------------------------------------------------------------
+${predictionResult.diagnosis === 'Malignant' 
+  ? 'URGENT: Highly abnormal nuclear morphometry detected. Immediate core needle biopsy verification and surgical oncology consultation advised.' 
+  : 'Routine clinical monitoring recommended. Benign cytology consistent with physiological fibroadenoma or normal lobular tissue.'}
+========================================================================
+Report digitally encrypted and anchored into Patient EHR Vault on Blockchain.
+`;
+
+      const blob = new Blob([reportContent], { type: 'text/plain' });
+      const safeName = `Biopsy_Diagnosis_${predictionResult.diagnosis}_${Date.now()}.txt`;
+      const reportFile = new File([blob], safeName, { type: 'text/plain' });
+
+      const fd = new FormData();
+      fd.append("patient_id", pid.trim());
+      fd.append("file", reportFile);
+      fd.append("report_type", "Biopsy Oncology AI Diagnosis Report");
+      fd.append("notes", `Biopsy Assessment: ${predictionResult.diagnosis} (Risk Score: ${predictionResult.risk_score})`);
+
+      const res = await fetch(`${API_URL}/api/v1/doctor/upload-ehr`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${doctorToken}` },
+        body: fd
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Success!\nBiopsy Diagnosis for '${predictionResult.diagnosis}' encrypted and anchored to Patient ${pid.trim()}'s EHR records!\nIPFS CID: ${data.ipfs_cid}`);
+        setShowUploadModal(false);
+        if (onDiagnosisUploaded) onDiagnosisUploaded();
+      } else {
+        alert(data.detail || "Failed to upload diagnosis to patient EHR");
+      }
+    } catch (err: any) {
+      alert("Upload failed: " + (err.message || err));
+    } finally {
+      setIsUploadingToEHR(false);
     }
   };
 
@@ -504,8 +602,38 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
                 Anomaly Score: +{predictionResult.anomaly_score}
               </span>
             </div>
-            <div className="text-xs font-mono text-gray-300">
-              Model: <span className="text-cyan-300 font-bold">Random Forest + TreeExplainer</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="text-xs font-mono text-gray-300">
+                Model: <span className="text-cyan-300 font-bold">Random Forest + TreeExplainer</span>
+              </div>
+              <button
+                type="button"
+                id="upload-biopsy-diagnosis-to-ehr-btn"
+                disabled={isUploadingToEHR}
+                onClick={() => {
+                  if (activePatientId) {
+                    handleUploadDiagnosisToEHR(activePatientId);
+                  } else {
+                    setShowUploadModal(true);
+                  }
+                }}
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 disabled:opacity-50 text-[#070b14] px-4 py-1.5 rounded-xl font-extrabold font-mono text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              >
+                {isUploadingToEHR ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-[#070b14]" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Anchoring to Patient EHR...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📤</span>
+                    <span>Upload Biopsy Diagnosis to Patient EHR</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -797,6 +925,45 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Patient ID Prompt Modal for Biopsy Diagnosis Upload */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-[#0f172a] border border-cyan-500/40 p-6 rounded-2xl w-full max-w-sm shadow-2xl">
+            <h4 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <span>📤</span>
+              <span>Upload to Patient Vault</span>
+            </h4>
+            <p className="text-xs text-gray-400 font-mono mb-4">
+              Enter the Patient ID to encrypt and anchor this Biopsy Oncology Diagnosis to their medical records.
+            </p>
+            <input
+              type="text"
+              value={targetPatientId}
+              onChange={e => setTargetPatientId(e.target.value)}
+              placeholder="Patient ID (e.g. A02C0905I, P20A0105I)"
+              className="w-full bg-[#1e293b] text-white p-2.5 rounded-lg border border-gray-700 font-mono text-sm focus:border-cyan-400 focus:outline-none mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="text-xs font-mono text-gray-400 hover:text-white px-3 py-2 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!targetPatientId.trim() || isUploadingToEHR}
+                onClick={() => handleUploadDiagnosisToEHR(targetPatientId.trim())}
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-[#070b14] font-bold font-mono text-xs px-5 py-2 rounded-lg cursor-pointer transition-all shadow-md"
+              >
+                {isUploadingToEHR ? "Anchoring..." : "Confirm & Anchor"}
+              </button>
+            </div>
           </div>
         </div>
       )}

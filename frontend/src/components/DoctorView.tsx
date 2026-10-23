@@ -29,6 +29,15 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   const [breakGlassForm, setBreakGlassForm] = useState({ patient_id: '', proxy_phone_number: '' });
   const [patientData, setPatientData] = useState<any>(null);
 
+  // Doctor EHR Upload Modal State
+  const [showDocUploadModal, setShowDocUploadModal] = useState(false);
+  const [docUploadPatientId, setDocUploadPatientId] = useState("");
+  const [docUploadFile, setDocUploadFile] = useState<File | null>(null);
+  const [docReportType, setDocReportType] = useState("Post-Diagnosis Clinical Assessment");
+  const [docClinicalNotes, setDocClinicalNotes] = useState("");
+  const [isDocUploadingEHR, setIsDocUploadingEHR] = useState(false);
+  const [docUploadStep, setDocUploadStep] = useState("");
+
   // Loading animation states
   const [isFetchingEHR, setIsFetchingEHR] = useState(false);
   const [downloadingCid, setDownloadingCid] = useState<string | null>(null);
@@ -178,6 +187,78 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
     }
   };
 
+  const handleDoctorUploadEHR = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeDoctorId || !doctorToken) {
+      alert("Please log in as Doctor first.");
+      setLoginForm(prev => ({ ...prev, doctor_id: activeDoctorId || "" }));
+      setShowDocLogin(true);
+      return;
+    }
+
+    const pid = docUploadPatientId.trim() || patientData?.patient_id;
+    if (!pid) return alert("Please specify the Patient ID.");
+
+    let fileToUpload = docUploadFile;
+    if (!fileToUpload) {
+      if (!docClinicalNotes.trim()) {
+        return alert("Please select a medical report file or write clinical consultation notes.");
+      }
+      const noteContent = `CLINICAL CONSULTATION & DIAGNOSTIC REPORT\n` +
+        `Patient ID: ${pid}\n` +
+        `Attending Practitioner: Dr. (${activeDoctorId})\n` +
+        `Report Category: ${docReportType}\n` +
+        `Timestamp: ${new Date().toISOString()}\n` +
+        `Decentralized Anchor: Hardhat Smart Contract + IPFS (AES-256-CBC)\n\n` +
+        `============================================================\n` +
+        `CLINICAL DIAGNOSTIC ASSESSMENT & NOTES:\n` +
+        `============================================================\n\n` +
+        `${docClinicalNotes.trim()}\n\n` +
+        `-- End of Doctor Report --`;
+      const blob = new Blob([noteContent], { type: 'text/plain' });
+      const safeFilename = `Clinical_Diagnosis_${pid}_${Date.now()}.txt`;
+      fileToUpload = new File([blob], safeFilename, { type: 'text/plain' });
+    }
+
+    setIsDocUploadingEHR(true);
+    setDocUploadStep("Encrypting clinical record with AES-256-CBC...");
+
+    const t1 = setTimeout(() => setDocUploadStep("Pinning encrypted record to decentralized Pinata IPFS..."), 600);
+    const t2 = setTimeout(() => setDocUploadStep("Anchoring CID to Hardhat Smart Contract on-chain..."), 1200);
+
+    try {
+      const fd = new FormData();
+      fd.append("patient_id", pid);
+      fd.append("file", fileToUpload);
+      fd.append("report_type", docReportType);
+      if (docClinicalNotes) fd.append("notes", docClinicalNotes);
+
+      const res = await fetch(`${API_URL}/api/v1/doctor/upload-ehr`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${doctorToken}` },
+        body: fd
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Success!\nClinical EHR '${fileToUpload.name}' encrypted and anchored on-chain for patient ${pid}.\nIPFS CID: ${data.ipfs_cid}`);
+        setShowDocUploadModal(false);
+        setDocUploadFile(null);
+        setDocClinicalNotes("");
+        // Automatically fetch and refresh patientData
+        await handleFetchEHR(pid);
+      } else {
+        alert(data.detail || "Doctor EHR upload failed");
+      }
+    } catch (err: any) {
+      alert("Doctor upload failed: " + (err.message || err));
+    } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      setIsDocUploadingEHR(false);
+      setDocUploadStep("");
+    }
+  };
+
   return (
     <div className="w-full max-w-5xl mt-6 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -236,6 +317,8 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
           doctorToken={doctorToken}
           patientRecords={patientData?.records || []}
           initialRecord={selectedRecordForAi}
+          activePatientId={patientData?.patient_id || null}
+          onDiagnosisUploaded={() => patientData?.patient_id && handleFetchEHR(patientData.patient_id)}
           onBackToPortal={() => {
             setSelectedRecordForAi(null);
             setActiveSection('records');
@@ -245,6 +328,8 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
         <ClinicalDiagnosisView 
           initialDoctorId={activeDoctorId}
           initialDoctorToken={doctorToken}
+          activePatientId={patientData?.patient_id || null}
+          onDiagnosisUploaded={() => patientData?.patient_id && handleFetchEHR(patientData.patient_id)}
           onBackToPortal={() => setActiveSection('records')}
         />
       ) : (
@@ -311,6 +396,18 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
                 >
                   <span>🔬</span> Biopsy Oncology AI
                 </button>
+
+                <button 
+                  onClick={() => {
+                    setDocUploadPatientId(patientData?.patient_id || "");
+                    setShowDocUploadModal(true);
+                  }} 
+                  id="doctor-action-bar-upload-btn"
+                  className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-[#070b14] px-5 py-2 rounded-lg font-bold flex items-center gap-2 cursor-pointer text-xs font-mono shadow-md transition-all"
+                >
+                  <span>📤</span>
+                  <span>Upload Patient EHR</span>
+                </button>
               </>
             )}
           </div>
@@ -344,7 +441,24 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
               <div>Proxy 1: <span className="text-white">{patientData.profile.emergency_contact_1}</span></div>
               <div>Proxy 2: <span className="text-white">{patientData.profile.emergency_contact_2 || "N/A"}</span></div>
             </div>
-            <h4 className="text-lg font-bold text-white mb-2">Decrypted IPFS Records</h4>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-2 border-b border-gray-700/60">
+              <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>📋</span>
+                <span>Decrypted IPFS Records ({patientData.records.length})</span>
+              </h4>
+              <button
+                onClick={() => {
+                  setDocUploadPatientId(patientData.patient_id);
+                  setShowDocUploadModal(true);
+                }}
+                id="doctor-upload-new-ehr-btn"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              >
+                <span>📤</span>
+                <span>Upload New EHR / Diagnosis Report</span>
+              </button>
+            </div>
             {patientData.records.map((r: any, i: number) => (
               <div key={i} className="bg-[#0a0f1d] p-4 rounded-xl border border-gray-700 mb-3 shadow-md">
                 <div className="text-xs text-gray-400 font-mono">{r.timestamp}</div>
@@ -533,6 +647,139 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Upload EHR Modal */}
+      {showDocUploadModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" id="doctor-upload-ehr-modal">
+          <div className="card-bg p-8 rounded-2xl w-full max-w-lg border border-cyan-500/40 shadow-2xl relative">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-800">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <span>📤</span>
+                <span>Upload Patient EHR / Diagnosis</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDocUploadModal(false);
+                  setDocUploadFile(null);
+                  setDocClinicalNotes("");
+                }}
+                className="text-gray-400 hover:text-white p-1 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 font-mono mb-4">
+              Cryptographically encrypts with AES-256-CBC, uploads to decentralized IPFS, and anchors the CID to the patient&apos;s smart contract.
+            </p>
+
+            {isDocUploadingEHR ? (
+              <div className="py-8 text-center animate-fade-in">
+                <div className="relative w-16 h-16 mx-auto mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-cyan-500/20 animate-ping" />
+                  <div className="w-16 h-16 rounded-full border-4 border-t-cyan-400 border-r-transparent border-b-cyan-500 border-l-transparent animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center text-xl">
+                    🔒
+                  </div>
+                </div>
+                <div className="font-bold text-cyan-300 font-mono text-sm mb-1">
+                  Secure Clinical Ingestion
+                </div>
+                <div className="text-xs text-gray-300 font-mono animate-pulse">
+                  {docUploadStep || "Encrypting & Uploading to IPFS..."}
+                </div>
+                <div className="mt-3 text-[11px] text-gray-500 font-mono">
+                  Anchoring transaction on Hardhat blockchain for patient...
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleDoctorUploadEHR} className="space-y-4">
+                <div>
+                  <label className="text-xs text-gray-300 font-mono block mb-1">Target Patient ID</label>
+                  <input
+                    required
+                    value={docUploadPatientId}
+                    onChange={e => setDocUploadPatientId(e.target.value)}
+                    placeholder="Patient ID (e.g. A02C0905I, P20A0105I)"
+                    id="doc-upload-patient-id-input"
+                    className="w-full bg-[#090f1d] text-white p-2.5 rounded-xl border border-gray-700 font-mono text-xs focus:border-cyan-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-300 font-mono block mb-1">Report Category / Type</label>
+                  <select
+                    value={docReportType}
+                    onChange={e => setDocReportType(e.target.value)}
+                    id="doc-upload-report-type-select"
+                    className="w-full bg-[#090f1d] text-white p-2.5 rounded-xl border border-gray-700 font-mono text-xs focus:border-cyan-400 focus:outline-none"
+                  >
+                    <option value="Post-Diagnosis Clinical Assessment">Post-Diagnosis Clinical Assessment</option>
+                    <option value="Pathology & Lab Diagnostics Report">Pathology & Lab Diagnostics Report</option>
+                    <option value="Medication Prescription & Protocol">Medication Prescription & Protocol</option>
+                    <option value="Follow-up Consultation Notes">Follow-up Consultation Notes</option>
+                    <option value="Radiology / Imaging Interpretation">Radiology / Imaging Interpretation</option>
+                    <option value="General Medical Record">General Medical Record</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-300 font-mono block mb-1">Attach Medical Report File (PDF, Image, Text)</label>
+                  <input
+                    type="file"
+                    id="doc-upload-file-input"
+                    onChange={e => setDocUploadFile(e.target.files?.[0] || null)}
+                    className="w-full text-white p-2.5 border border-gray-700 rounded-xl bg-[#090f1d] text-xs focus:border-cyan-400"
+                  />
+                  {docUploadFile && (
+                    <div className="mt-1 text-[11px] text-cyan-400 font-mono">
+                      ✓ Ready: {docUploadFile.name} ({(docUploadFile.size / 1024).toFixed(1)} KB)
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-300 font-mono block mb-1">
+                    Clinical Notes / Observations <span className="text-gray-500 font-normal">(Optional if file attached, or written as report)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={docClinicalNotes}
+                    onChange={e => setDocClinicalNotes(e.target.value)}
+                    placeholder="Enter diagnostic notes, treatment instructions, or clinical observations for the patient..."
+                    id="doc-upload-notes-input"
+                    className="w-full bg-[#090f1d] text-white p-2.5 rounded-xl border border-gray-700 font-mono text-xs focus:border-cyan-400 focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDocUploadModal(false);
+                      setDocUploadFile(null);
+                      setDocClinicalNotes("");
+                    }}
+                    className="text-gray-400 hover:text-white px-4 py-2 text-xs font-mono cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!docUploadPatientId.trim() || (!docUploadFile && !docClinicalNotes.trim())}
+                    id="submit-doctor-ehr-upload-btn"
+                    className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:bg-gray-800 disabled:text-gray-500 text-[#070b14] px-6 py-2.5 rounded-xl font-bold font-mono text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>🔒</span>
+                    <span>Encrypt & Anchor to Patient Vault</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

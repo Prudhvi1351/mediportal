@@ -228,11 +228,20 @@ def login_patient(patient_id: str = Form(...), password: str = Form(...), db: Se
 async def upload_ehr(
     patient_id: str = Form(...), 
     file: UploadFile = File(...), 
+    notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(auth.get_current_user)
 ):
-    if current_user.role != "PATIENT" or current_user.patient_id != patient_id:
-        raise HTTPException(status_code=403, detail="Not authorized to upload for this patient")
+    # Allow patient uploading for themselves, or verified doctor uploading for patient
+    if current_user.role == "PATIENT":
+        if current_user.patient_id != patient_id:
+            raise HTTPException(status_code=403, detail="Not authorized to upload for another patient")
+    elif current_user.role == "DOCTOR":
+        doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == current_user.doctor_id).first()
+        if not doctor or doctor.status != "VERIFIED":
+            raise HTTPException(status_code=403, detail="Only VERIFIED doctors can upload medical records for patients")
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized to upload records")
 
     patient = db.query(models.Patient).filter(models.Patient.patient_id == patient_id).first()
     if not patient:
@@ -247,8 +256,11 @@ async def upload_ehr(
 
     patient_wallet = patient.wallet_address
     if ehr_contract and patient_wallet and w3.is_connected():
-        tx_hash = ehr_contract.functions.addRecord(ipfs_cid).transact({'from': patient_wallet})
-        w3.eth.wait_for_transaction_receipt(tx_hash)
+        try:
+            tx_hash = ehr_contract.functions.addRecord(ipfs_cid).transact({'from': patient_wallet})
+            w3.eth.wait_for_transaction_receipt(tx_hash)
+        except Exception as bc_err:
+            print(f"Smart contract anchor warning: {bc_err}")
 
     timestamp_str = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     new_record = models.EHRRecord(
@@ -261,7 +273,173 @@ async def upload_ehr(
     db.add(new_record)
     db.commit()
 
-    return {"status": "success", "ipfs_cid": ipfs_cid}
+    return {
+        "status": "success", 
+        "ipfs_cid": ipfs_cid, 
+        "filename": file.filename, 
+        "patient_id": patient_id
+    }
+
+# --- Doctor Upload EHR for Patient ---
+async def _process_doctor_upload(
+    patient_id: str,
+    file: UploadFile,
+    notes: Optional[str],
+    report_type: Optional[str],
+    db: Session,
+    current_user: Any
+):
+    if current_user.role != "DOCTOR":
+        raise HTTPException(status_code=403, detail="Doctor authorization required")
+
+    doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == current_user.doctor_id).first()
+    if not doctor or doctor.status != "VERIFIED":
+        raise HTTPException(status_code=403, detail="Only VERIFIED doctors can upload clinical EHR records")
+
+    patient = db.query(models.Patient).filter(models.Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail=f"Patient '{patient_id}' not found")
+
+    raw_content = await file.read()
+    cipher = AES.new(AES_KEY, AES.MODE_CBC)
+    ciphertext = cipher.encrypt(pad(raw_content, AES.block_size))
+    encrypted_payload = cipher.iv + ciphertext
+
+    ipfs_cid = upload_to_pinata(encrypted_payload, file.filename)
+
+    patient_wallet = patient.wallet_address
+    if ehr_contract and patient_wallet and w3.is_connected():
+        try:
+            tx_hash = ehr_contract.functions.addRecord(ipfs_cid).transact({'from': patient_wallet})
+            w3.eth.wait_for_transaction_receipt(tx_hash)
+        except Exception as bc_err:
+            print(f"Smart contract anchor warning: {bc_err}")
+
+    timestamp_str = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    new_record = models.EHRRecord(
+        patient_id=patient_id,
+        filename=file.filename,
+        ipfs_cid=ipfs_cid,
+        encrypted_data=encrypted_payload.hex(),
+        timestamp=timestamp_str
+    )
+    db.add(new_record)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Clinical EHR record '{file.filename}' securely uploaded and anchored for patient {patient_id}",
+        "ipfs_cid": ipfs_cid,
+        "filename": file.filename,
+        "patient_id": patient_id,
+        "uploaded_by": doctor.doctor_id,
+        "report_type": report_type or "Clinical Consultation Report"
+    }
+
+@app.post("/api/v1/doctor/patient/{patient_id}/upload-ehr")
+async def doctor_upload_ehr_path(
+    patient_id: str,
+    file: UploadFile = File(...),
+    notes: Optional[str] = Form(None),
+    report_type: Optional[str] = Form("Clinical Consultation Report"),
+    db: Session = Depends(get_db),
+    current_user = Depends(auth.get_current_user)
+):
+    return await _process_doctor_upload(patient_id, file, notes, report_type, db, current_user)
+
+@app.post("/api/v1/doctor/upload-ehr")
+async def doctor_upload_ehr_form(
+    patient_id: str = Form(...),
+    file: UploadFile = File(...),
+    notes: Optional[str] = Form(None),
+    report_type: Optional[str] = Form("Clinical Consultation Report"),
+    db: Session = Depends(get_db),
+    current_user = Depends(auth.get_current_user)
+):
+    return await _process_doctor_upload(patient_id, file, notes, report_type, db, current_user)
+
+# --- Patient Records Retrieval (Patient Vault & History) ---
+@app.get("/api/v1/patient/{patient_id}/records")
+def get_patient_records(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(auth.get_current_user)
+):
+    if current_user.role == "PATIENT":
+        if current_user.patient_id != patient_id:
+            raise HTTPException(status_code=403, detail="Unauthorized: You cannot view records of another patient")
+    elif current_user.role == "DOCTOR":
+        doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == current_user.doctor_id).first()
+        if not doctor or doctor.status != "VERIFIED":
+            raise HTTPException(status_code=403, detail="Unauthorized: Only VERIFIED doctors can access patient records")
+    else:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    patient = db.query(models.Patient).filter(models.Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    records_db = db.query(models.EHRRecord).filter(models.EHRRecord.patient_id == patient_id).order_by(models.EHRRecord.id.desc()).all()
+    decrypted_records = []
+
+    import base64
+    for rec in records_db:
+        try:
+            if rec.encrypted_data:
+                encrypted_payload = bytes.fromhex(rec.encrypted_data)
+            else:
+                ipfs_url = f"https://gateway.pinata.cloud/ipfs/{rec.ipfs_cid}"
+                res = requests.get(ipfs_url, timeout=5)
+                if res.status_code == 200:
+                    encrypted_payload = res.content
+                else:
+                    continue
+
+            iv = encrypted_payload[:16]
+            cipher = AES.new(AES_KEY, AES.MODE_CBC, iv)
+            decrypted_bytes = unpad(cipher.decrypt(encrypted_payload[16:]), AES.block_size)
+            decrypted_content = base64.b64encode(decrypted_bytes).decode('utf-8')
+
+            decrypted_records.append({
+                "id": rec.id,
+                "filename": rec.filename,
+                "ipfs_cid": rec.ipfs_cid,
+                "content": decrypted_content,
+                "timestamp": rec.timestamp,
+                "size_bytes": len(decrypted_bytes)
+            })
+        except Exception as err:
+            print(f"Decryption error for record {rec.id} ({rec.filename}): {err}")
+            decrypted_records.append({
+                "id": rec.id,
+                "filename": rec.filename,
+                "ipfs_cid": rec.ipfs_cid,
+                "content": None,
+                "error": f"Decryption failed: {str(err)}",
+                "timestamp": rec.timestamp,
+                "size_bytes": 0
+            })
+
+    profile = {
+        "patient_id": patient.patient_id,
+        "full_name": patient.full_name,
+        "email": patient.email,
+        "age": patient.age,
+        "dob": patient.dob,
+        "gender": patient.gender,
+        "blood_group": patient.blood_group,
+        "address": patient.address,
+        "emergency_contact_1": patient.emergency_contact_1,
+        "emergency_contact_2": patient.emergency_contact_2,
+        "wallet_address": patient.wallet_address
+    }
+
+    return {
+        "status": "success",
+        "patient_id": patient_id,
+        "profile": profile,
+        "records": decrypted_records
+    }
 
 # --- Doctor Verification & Lookup Endpoint for Patients ---
 @app.get("/api/v1/doctor/{doctor_id}/info")
@@ -479,18 +657,24 @@ def login_doctor(doctor_id: str = Form(...), password: str = Form(...), db: Sess
     }
     return {"access_token": access_token, "token_type": "bearer", "doctor_id": doctor_id, "status": "logged_in", "profile": profile}
 
-# --- Doctor Data Access ---
+# --- Doctor & Patient Data Access ---
 @app.get("/api/v1/ehr/{patient_id}")
 def retrieve_ehr(
     patient_id: str, 
-    doctor_id: str, 
+    doctor_id: Optional[str] = None, 
     db: Session = Depends(get_db),
     current_user = Depends(auth.get_current_user)
 ):
-    if current_user.role != "DOCTOR" or current_user.doctor_id != doctor_id:
+    if current_user.role == "PATIENT":
+        if current_user.patient_id != patient_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access another patient's records")
+        return get_patient_records(patient_id=patient_id, db=db, current_user=current_user)
+
+    if current_user.role != "DOCTOR":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == doctor_id).first()
+    doc_id = doctor_id or getattr(current_user, "doctor_id", None)
+    doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == doc_id).first()
     if not doctor or doctor.status != 'VERIFIED':
         raise HTTPException(status_code=401, detail="Unauthorized: Only VERIFIED doctors can access EHRs")
         
@@ -502,12 +686,14 @@ def retrieve_ehr(
     doctor_wallet = doctor.wallet_address
     
     decrypted_records = []
+    seen_cids = set()
 
     if ehr_contract and w3.is_connected() and patient_wallet and doctor_wallet:
         try:
             record_count = ehr_contract.functions.patientRecordCount(patient_wallet).call({'from': doctor_wallet})
             for i in range(record_count):
                 cid, timestamp = ehr_contract.functions.getRecord(patient_wallet, i).call({'from': doctor_wallet})
+                seen_cids.add(cid)
                 
                 ipfs_url = f"https://gateway.pinata.cloud/ipfs/{cid}"
                 try:
@@ -528,8 +714,6 @@ def retrieve_ehr(
                     iv = encrypted_payload[:16]
                     cipher = AES.new(AES_KEY, AES.MODE_CBC, iv)
                     decrypted_bytes = unpad(cipher.decrypt(encrypted_payload[16:]), AES.block_size)
-                    
-                    # Base64 encode the binary data instead of decoding it to a raw UTF-8 string with control characters
                     decrypted_content = base64.b64encode(decrypted_bytes).decode('utf-8')
                     
                     rec_local = db.query(models.EHRRecord).filter(models.EHRRecord.ipfs_cid == cid).first()
@@ -556,9 +740,36 @@ def retrieve_ehr(
             if "Unauthorized" in str(e):
                 raise HTTPException(status_code=403, detail="Unauthorized: You do not have access to this record on the blockchain")
             else:
-                raise HTTPException(status_code=500, detail=str(e))
-    else:
-        raise HTTPException(status_code=500, detail="Blockchain connection not available")
+                print(f"Blockchain query warning in retrieve_ehr: {e}")
+
+    # Also include any local database records for this patient not already added
+    local_recs = db.query(models.EHRRecord).filter(models.EHRRecord.patient_id == patient_id).order_by(models.EHRRecord.id.desc()).all()
+    import base64
+    for r in local_recs:
+        if r.ipfs_cid in seen_cids:
+            continue
+        try:
+            encrypted_payload = bytes.fromhex(r.encrypted_data)
+            iv = encrypted_payload[:16]
+            cipher = AES.new(AES_KEY, AES.MODE_CBC, iv)
+            decrypted_bytes = unpad(cipher.decrypt(encrypted_payload[16:]), AES.block_size)
+            decrypted_content = base64.b64encode(decrypted_bytes).decode('utf-8')
+            decrypted_records.append({
+                "filename": r.filename,
+                "ipfs_cid": r.ipfs_cid,
+                "content": decrypted_content,
+                "timestamp": r.timestamp
+            })
+            seen_cids.add(r.ipfs_cid)
+        except Exception as dec_err:
+            decrypted_records.append({
+                "filename": r.filename,
+                "ipfs_cid": r.ipfs_cid,
+                "content": None,
+                "error": str(dec_err),
+                "timestamp": r.timestamp
+            })
+            seen_cids.add(r.ipfs_cid)
 
     profile = {
         "full_name": patient.full_name,

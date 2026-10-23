@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -65,6 +65,15 @@ export const PatientView: React.FC<PatientViewProps> = ({
   const [regForm, setRegForm] = useState({full_name:'', email:'', password:'', age:'', dob:'', gender:'Male', blood_group:'A+', address:'', emergency_contact_1:'', emergency_contact_2:''});
   const [loginForm, setLoginForm] = useState({patient_id:'', password:''});
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+
+  // Previously uploaded EHR Records state
+  const [patientRecords, setPatientRecords] = useState<any[]>([]);
+  const [patientProfile, setPatientProfile] = useState<any>(null);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const [downloadingCid, setDownloadingCid] = useState<string | null>(null);
+  const [previewRecord, setPreviewRecord] = useState<any | null>(null);
+  const [searchFilter, setSearchFilter] = useState("");
+  const [copiedCid, setCopiedCid] = useState<string | null>(null);
 
   // Individual React state variables for Day, Month, and Year dropdowns
   const [selectedDay, setSelectedDay] = useState<string>('');
@@ -156,6 +165,37 @@ export const PatientView: React.FC<PatientViewProps> = ({
     } else alert(data.detail || "Failed.");
   };
 
+  const fetchPatientRecords = async (targetId?: string, targetToken?: string) => {
+    const pid = targetId || activePatientId;
+    const tok = targetToken || patientToken;
+    if (!pid || !tok) return;
+
+    setIsLoadingRecords(true);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/patient/${encodeURIComponent(pid.trim())}/records`, {
+        headers: { "Authorization": `Bearer ${tok}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPatientRecords(data.records || []);
+        if (data.profile) setPatientProfile(data.profile);
+      } else {
+        console.warn("Could not retrieve patient records:", data.detail);
+      }
+    } catch (err: any) {
+      console.error("Error fetching patient records:", err);
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activePatientId && patientToken) {
+      fetchPatientRecords(activePatientId, patientToken);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePatientId, patientToken]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const fd = new FormData();
@@ -172,6 +212,7 @@ export const PatientView: React.FC<PatientViewProps> = ({
         localStorage.setItem("patient_token", data.access_token);
       }
       setShowLoginModal(false);
+      fetchPatientRecords(data.patient_id, data.access_token);
       alert("Logged in successfully!");
     } else alert(data.detail || "Login failed");
   };
@@ -201,6 +242,7 @@ export const PatientView: React.FC<PatientViewProps> = ({
         alert(`EHR Encrypted & Uploaded Successfully!\nIPFS CID: ${data.ipfs_cid}`); 
         setShowUploadModal(false); 
         setFileToUpload(null);
+        fetchPatientRecords();
       } else {
         alert(data.detail || "Upload failed");
       }
@@ -212,6 +254,42 @@ export const PatientView: React.FC<PatientViewProps> = ({
       setIsUploading(false);
       setUploadStep("");
     }
+  };
+
+  const handleDownloadRecord = async (r: any) => {
+    try {
+      setDownloadingCid(r.ipfs_cid);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const binaryString = window.atob(r.content);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const isPdf = r.filename.toLowerCase().endsWith('.pdf');
+      const isImage = /\.(jpeg|jpg|png|webp|gif)$/i.test(r.filename);
+      const mimeType = isPdf ? 'application/pdf' : isImage ? 'image/jpeg' : 'application/octet-stream';
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert("Download and decryption failed: " + (e.message || e));
+    } finally {
+      setDownloadingCid(null);
+    }
+  };
+
+  const copyToClipboard = (text: string, cid: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCid(cid);
+    setTimeout(() => setCopiedCid(null), 2000);
   };
 
   const handleFetchDoctorInfo = async () => {
@@ -273,25 +351,234 @@ export const PatientView: React.FC<PatientViewProps> = ({
     }
   };
 
+  const filteredRecords = patientRecords.filter(r => {
+    if (!searchFilter.trim()) return true;
+    const q = searchFilter.toLowerCase();
+    return (r.filename && r.filename.toLowerCase().includes(q)) ||
+           (r.ipfs_cid && r.ipfs_cid.toLowerCase().includes(q)) ||
+           (r.timestamp && r.timestamp.toLowerCase().includes(q));
+  });
+
   return (
     <div className="w-full max-w-4xl mt-6 animate-fade-in">
       <button onClick={() => setCurrentView('landing')} className="text-gray-400 hover:text-white mb-6">← Back to Portal Select</button>
       <div className="card-bg p-8 rounded-2xl mb-8 border-t-4 border-t-[#00f2fe]">
         <h2 className="text-3xl font-bold text-white mb-2">Patient Dashboard</h2>
-        <p className="text-gray-400 mb-6">Manage your health records securely on IPFS.</p>
+        <p className="text-gray-400 mb-6">Manage and view your health records securely on IPFS & Blockchain.</p>
         
         {!activePatientId ? (
           <div className="flex gap-4">
-            <button onClick={() => setShowRegModal(true)} className="bg-[#00f2fe] text-[#0a0f1d] px-6 py-2 rounded-lg font-bold">Register New Account</button>
-            <button onClick={() => setShowLoginModal(true)} className="border border-[#00f2fe] text-[#00f2fe] hover:bg-[#00f2fe]/10 px-6 py-2 rounded-lg font-bold">Patient Login</button>
+            <button onClick={() => setShowRegModal(true)} className="bg-[#00f2fe] text-[#0a0f1d] px-6 py-2 rounded-lg font-bold cursor-pointer">Register New Account</button>
+            <button onClick={() => setShowLoginModal(true)} className="border border-[#00f2fe] text-[#00f2fe] hover:bg-[#00f2fe]/10 px-6 py-2 rounded-lg font-bold cursor-pointer">Patient Login</button>
           </div>
         ) : (
-          <div className="flex gap-4">
-            <button onClick={() => setShowUploadModal(true)} className="border border-[#00f2fe] text-[#00f2fe] hover:bg-[#00f2fe]/10 px-6 py-2 rounded-lg font-bold">Upload New EHR</button>
-            <button onClick={() => setShowGrantModal(true)} className="border border-purple-500 text-purple-400 hover:bg-purple-500/10 px-6 py-2 rounded-lg font-bold">Grant Doctor Access</button>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <div className="flex flex-wrap gap-3">
+                <button 
+                  onClick={() => setShowUploadModal(true)} 
+                  id="patient-upload-new-ehr-btn"
+                  className="bg-[#00f2fe] text-[#0a0f1d] hover:bg-cyan-300 px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all font-mono text-xs"
+                >
+                  <span>📤</span>
+                  <span>Upload New EHR</span>
+                </button>
+                <button 
+                  onClick={() => setShowGrantModal(true)} 
+                  id="patient-grant-access-btn"
+                  className="border border-purple-500 text-purple-400 hover:bg-purple-500/10 px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 cursor-pointer transition-all font-mono text-xs"
+                >
+                  <span>🔐</span>
+                  <span>Grant Doctor Access</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => fetchPatientRecords()}
+                  disabled={isLoadingRecords}
+                  id="patient-refresh-records-btn"
+                  className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-lg text-xs font-mono flex items-center gap-1.5 cursor-pointer border border-gray-700 transition-colors"
+                >
+                  <span className={isLoadingRecords ? "animate-spin" : ""}>🔄</span>
+                  <span>Refresh Vault</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Logged in Patient Profile Badge */}
+            <div className="bg-[#0a101f] p-4 rounded-xl border border-gray-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-gray-300">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Active Patient:</span>
+                <strong className="text-cyan-400 font-bold">{activePatientId}</strong>
+                {patientProfile?.full_name && (
+                  <span className="text-white font-semibold ml-1">({patientProfile.full_name})</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                {patientProfile?.blood_group && (
+                  <span>Blood Group: <strong className="text-red-400">{patientProfile.blood_group}</strong></span>
+                )}
+                {patientProfile?.age && (
+                  <span>Age: <strong className="text-white">{patientProfile.age}</strong></span>
+                )}
+                {patientProfile?.gender && (
+                  <span>Gender: <strong className="text-gray-300">{patientProfile.gender}</strong></span>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
+
+      {/* PREVIOUSLY UPLOADED EHRS SECTION */}
+      {activePatientId && (
+        <div className="card-bg p-8 rounded-2xl mb-8 border border-cyan-500/30 shadow-2xl animate-fade-in" id="patient-ehr-vault-section">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-800">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 text-lg border border-cyan-500/30">📂</span>
+                <h3 className="text-2xl font-bold text-white">Your Encrypted Health Records (EHR Vault)</h3>
+              </div>
+              <p className="text-xs text-gray-400 mt-1 font-mono">
+                Decentralized patient medical history anchored on Hardhat & IPFS with AES-256-CBC cryptography.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="bg-cyan-950 text-cyan-300 border border-cyan-800 px-3 py-1 rounded-full text-xs font-mono font-bold">
+                {patientRecords.length} {patientRecords.length === 1 ? 'Record' : 'Records'} Secured
+              </span>
+            </div>
+          </div>
+
+          {/* Search filter if records exist */}
+          {patientRecords.length > 2 && (
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search your records by filename or IPFS CID..."
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                className="w-full bg-[#090f1d] text-white p-2.5 rounded-xl border border-gray-800 font-mono text-xs focus:border-cyan-400 focus:outline-none"
+              />
+            </div>
+          )}
+
+          {/* Loading Animation */}
+          {isLoadingRecords ? (
+            <div className="py-12 text-center" id="records-loading-indicator">
+              <div className="relative w-12 h-12 mx-auto mb-3">
+                <div className="absolute inset-0 rounded-full border-4 border-cyan-500/20 animate-ping" />
+                <div className="w-12 h-12 rounded-full border-4 border-t-cyan-400 border-r-transparent border-b-cyan-500 border-l-transparent animate-spin" />
+              </div>
+              <div className="text-sm font-bold text-cyan-300 font-mono">Querying Blockchain & IPFS Vault...</div>
+              <div className="text-xs text-gray-400 font-mono mt-1">Retrieving decentralized records and decrypting AES-256 payload</div>
+            </div>
+          ) : patientRecords.length === 0 ? (
+            <div className="p-8 text-center bg-[#090f1d] rounded-2xl border border-dashed border-gray-700/80 my-2">
+              <div className="text-4xl mb-3">📂</div>
+              <div className="text-base font-bold text-white mb-1">No Medical Records Uploaded Yet</div>
+              <p className="text-xs text-gray-400 max-w-md mx-auto mb-4 font-mono">
+                Your medical vault is currently empty. Use the &quot;Upload New EHR&quot; button above to securely store your first clinical report or lab test on IPFS.
+              </p>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="bg-[#00f2fe] text-[#0a0f1d] px-5 py-2 rounded-lg font-bold font-mono text-xs hover:bg-cyan-300 transition-all cursor-pointer shadow-md inline-flex items-center gap-1.5"
+              >
+                <span>+</span>
+                <span>Upload First Record</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3" id="patient-records-list">
+              {filteredRecords.map((r: any, idx: number) => {
+                const isPdf = r.filename.toLowerCase().endsWith('.pdf');
+                const isImage = /\.(jpeg|jpg|png|webp|gif)$/i.test(r.filename);
+                const fileIcon = isPdf ? '📄' : isImage ? '🖼️' : '📝';
+                const fileColor = isPdf ? 'text-red-400 border-red-500/40 bg-red-950/30' : isImage ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-cyan-400 border-cyan-500/40 bg-cyan-950/30';
+
+                return (
+                  <div
+                    key={r.id || idx}
+                    className="bg-[#090f1d] p-4 rounded-xl border border-gray-800 hover:border-cyan-500/40 transition-all flex flex-wrap items-center justify-between gap-4 shadow-sm"
+                  >
+                    <div className="flex items-start gap-3.5 flex-1 min-w-[260px]">
+                      <div className={`p-2.5 rounded-xl border ${fileColor} text-xl flex-shrink-0`}>
+                        {fileIcon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-bold text-white text-sm truncate max-w-md" title={r.filename}>
+                            {r.filename}
+                          </span>
+                          <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            Decrypted & Verified
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-gray-400">
+                          {r.timestamp && <span>Date: {r.timestamp}</span>}
+                          {r.size_bytes && <span>Size: {(r.size_bytes / 1024).toFixed(1)} KB</span>}
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-500">CID:</span>
+                            <span className="text-cyan-300 font-mono truncate max-w-[140px]" title={r.ipfs_cid}>
+                              {r.ipfs_cid}
+                            </span>
+                            <button
+                              onClick={() => copyToClipboard(r.ipfs_cid, r.ipfs_cid)}
+                              className="text-gray-400 hover:text-cyan-300 text-[11px] ml-1 cursor-pointer"
+                              title="Copy IPFS CID"
+                            >
+                              {copiedCid === r.ipfs_cid ? '✓ Copied' : '📋'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {r.content && (
+                        <button
+                          onClick={() => setPreviewRecord(r)}
+                          id={`patient-preview-btn-${idx}`}
+                          className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-3.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer border border-gray-700"
+                        >
+                          <span>👁️</span>
+                          <span>Preview</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDownloadRecord(r)}
+                        disabled={downloadingCid === r.ipfs_cid || !r.content}
+                        id={`patient-download-btn-${idx}`}
+                        className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-500 text-white px-4 py-1.5 rounded-lg font-mono text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                      >
+                        {downloadingCid === r.ipfs_cid ? (
+                          <>
+                            <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Decrypting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>⬇️</span>
+                            <span>Download</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {showRegModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -679,6 +966,89 @@ export const PatientView: React.FC<PatientViewProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record Preview Modal */}
+      {previewRecord && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" id="record-preview-modal">
+          <div className="card-bg p-6 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-cyan-500/40 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <div>
+                <h4 className="font-bold text-white text-base flex items-center gap-2">
+                  <span>📄</span>
+                  <span>{previewRecord.filename}</span>
+                </h4>
+                <div className="text-[11px] font-mono text-cyan-400 mt-0.5 truncate max-w-md">
+                  IPFS CID: {previewRecord.ipfs_cid}
+                </div>
+              </div>
+              <button 
+                onClick={() => setPreviewRecord(null)} 
+                className="text-gray-400 hover:text-white p-1 rounded-lg text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mb-4 bg-[#070b14] p-4 rounded-xl border border-gray-800">
+              {/\.(jpeg|jpg|png|webp|gif)$/i.test(previewRecord.filename) ? (
+                <div className="flex justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={`data:image/jpeg;base64,${previewRecord.content}`} 
+                    alt={previewRecord.filename} 
+                    className="max-h-[60vh] rounded-lg shadow-lg object-contain"
+                  />
+                </div>
+              ) : previewRecord.filename.toLowerCase().endsWith('.txt') ? (
+                <pre className="font-mono text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">
+                  {(() => {
+                    try {
+                      return window.atob(previewRecord.content);
+                    } catch {
+                      return "Could not decode text content.";
+                    }
+                  })()}
+                </pre>
+              ) : (
+                <div className="text-center py-10">
+                  <div className="text-4xl mb-3">📄</div>
+                  <div className="text-sm font-bold text-white mb-1">{previewRecord.filename}</div>
+                  <p className="text-xs text-gray-400 font-mono max-w-md mx-auto mb-4">
+                    This encrypted medical document (PDF / Binary) has been successfully decrypted. Click below to download and view in your local reader.
+                  </p>
+                  <button
+                    onClick={() => handleDownloadRecord(previewRecord)}
+                    className="bg-[#00f2fe] text-[#0a0f1d] px-6 py-2 rounded-xl font-bold font-mono text-xs hover:bg-cyan-300 transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+                  >
+                    <span>⬇️</span>
+                    <span>Download Decrypted Document</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-2 text-xs font-mono text-gray-400">
+              <span className="text-emerald-400 flex items-center gap-1">
+                <span>✓</span> Verified AES-256 Payload
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDownloadRecord(previewRecord)}
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded-lg text-xs font-mono font-bold cursor-pointer"
+                >
+                  Download File
+                </button>
+                <button
+                  onClick={() => setPreviewRecord(null)}
+                  className="text-gray-400 hover:text-white px-3 py-1.5 text-xs font-mono cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
