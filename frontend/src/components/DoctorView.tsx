@@ -32,7 +32,6 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
   // Loading animation states
   const [isFetchingEHR, setIsFetchingEHR] = useState(false);
   const [downloadingCid, setDownloadingCid] = useState<string | null>(null);
-  const [analyzingCid, setAnalyzingCid] = useState<string | null>(null);
   const [isBreakGlassLoading, setIsBreakGlassLoading] = useState(false);
   const [isDocRegistering, setIsDocRegistering] = useState(false);
 

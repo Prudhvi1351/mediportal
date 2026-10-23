@@ -89,6 +89,7 @@ export const GeneralDiseaseAiView: React.FC<GeneralDiseaseAiViewProps> = ({
       setSelectedRecordCid(initialRecord.ipfs_cid);
       analyzeRecordDirectly(initialRecord);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRecord]);
 
   const analyzeRecordDirectly = async (rec: { filename: string; ipfs_cid: string; content?: string }) => {

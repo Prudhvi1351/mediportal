@@ -28,7 +28,8 @@ export const PacketSimulation: React.FC = () => {
   const [packets, setPackets] = useState<Packet[]>([]);
   const [rtt, setRtt] = useState<number>(0);
   const [autoSpeed, setAutoSpeed] = useState<number>(1);
-  const terminalEndRef = useRef<HTMLDivElement | null>(null);
+  const [autoScroll, setAutoScroll] = useState<boolean>(true);
+  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
 
   const payloadMeta = {
     ehr: {
@@ -67,8 +68,10 @@ export const PacketSimulation: React.FC = () => {
   };
 
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    if (autoScroll && terminalContainerRef.current) {
+      terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
+    }
+  }, [logs, autoScroll]);
 
   // Reset simulation state
   const handleReset = () => {
@@ -454,16 +457,35 @@ export const PacketSimulation: React.FC = () => {
               DECENTRALIZED PACKET TELEMETRY OVERLAY // TCP-IPFS-LEDGER
             </span>
           </div>
-          <button
-            onClick={() => setLogs([])}
-            className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            Clear Console
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAutoScroll(prev => !prev)}
+              type="button"
+              className={`text-[11px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer font-bold ${
+                autoScroll
+                  ? 'bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                  : 'bg-gray-800/80 border border-gray-700 text-gray-400 hover:text-white'
+              }`}
+              title={autoScroll ? "Click to lock screen and pause terminal auto-follow" : "Click to auto-follow new terminal logs"}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${autoScroll ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
+              Auto-Scroll: {autoScroll ? 'ON' : 'OFF (Locked)'}
+            </button>
+            <button
+              onClick={() => setLogs([])}
+              type="button"
+              className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors px-2 py-1"
+            >
+              Clear Console
+            </button>
+          </div>
         </div>
 
         {/* Scrollable logs box */}
-        <div className="h-48 overflow-y-auto space-y-1.5 pr-2 select-text font-mono text-[11px] leading-relaxed">
+        <div 
+          ref={terminalContainerRef}
+          className="h-48 overflow-y-auto space-y-1.5 pr-2 select-text font-mono text-[11px] leading-relaxed scrollbar-thin scrollbar-thumb-gray-800"
+        >
           {logs.length === 0 ? (
             <div className="text-gray-600 italic py-6 text-center">
               [Telemetry Idle] Awaiting packet transmission trigger. Click &quot;Transmit Payload&quot; above to start live tracing.
@@ -494,7 +516,6 @@ export const PacketSimulation: React.FC = () => {
               </div>
             ))
           )}
-          <div ref={terminalEndRef} />
         </div>
       </div>
     </div>
