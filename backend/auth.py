@@ -17,7 +17,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("JWT_SECRET_KEY environment variable is missing")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days validity
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/doctor/login") # Used for docs
 
@@ -41,7 +41,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Session expired or invalid credentials. Please log in again.",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -50,6 +50,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         role: str = payload.get("role")
         if user_id is None or role is None:
             raise credentials_exception
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Doctor session token has expired. Please re-authenticate.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     except JWTError:
         raise credentials_exception
 

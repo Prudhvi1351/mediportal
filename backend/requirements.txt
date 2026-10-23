@@ -18,3 +18,14 @@ numpy
 xgboost
 shap
 joblib
+
+# Medical NLP Pipeline & Document Parsing
+langchain
+langchain-openai
+langchain-core
+PyMuPDF<2.0.0
+pytesseract
+Pillow
+pypdf
+openai
+

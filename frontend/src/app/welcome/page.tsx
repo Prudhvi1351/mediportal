@@ -10,23 +10,7 @@ function WelcomeContent() {
   const patientName = searchParams.get('name') || (typeof window !== 'undefined' ? localStorage.getItem('patient_name') : '') || 'Valued Patient';
   const patientEmail = searchParams.get('email') || '';
 
-  const [countdown, setCountdown] = useState<number>(3);
   const [copied, setCopied] = useState<boolean>(false);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push('/?view=patient');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [router]);
 
   const handleCopyId = () => {
     if (patientId) {
@@ -67,7 +51,7 @@ function WelcomeContent() {
           Welcome, {patientName}!
         </h1>
         <p className="text-gray-400 text-sm mb-6 max-w-sm mx-auto">
-          Your deterministic decentralized patient profile is registered and authenticated on MediPortal.
+          Your deterministic decentralized patient profile is registered and authenticated on MediPortal. Take your time to review your credentials below.
         </p>
 
         {/* Generated Patient ID Display */}
@@ -75,17 +59,18 @@ function WelcomeContent() {
           <div className="text-xs text-gray-400 font-mono uppercase tracking-wider mb-1">
             Your Assigned Patient ID
           </div>
-          <div className="text-3xl font-mono font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-blue-400 tracking-wider">
+          <div className="text-3xl font-mono font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-blue-400 tracking-wider select-all" id="patient-id-display">
             {patientId}
           </div>
           <button
             onClick={handleCopyId}
-            className="mt-2 text-xs text-cyan-400/80 hover:text-cyan-300 font-mono transition-colors flex items-center justify-center gap-1 mx-auto"
+            id="copy-patient-id-btn"
+            className="mt-2 text-xs text-cyan-400/80 hover:text-cyan-300 font-mono transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer"
           >
             {copied ? (
               <span className="text-emerald-400 font-bold">✓ Copied to clipboard!</span>
             ) : (
-              <span>Click to copy ID</span>
+              <span>📋 Click to copy ID</span>
             )}
           </button>
         </div>
@@ -105,27 +90,24 @@ function WelcomeContent() {
           </div>
         </div>
 
-        {/* Countdown & Redirect Progress Bar */}
-        <div className="mb-6">
-          <div className="flex justify-between text-xs text-gray-400 mb-2 font-mono">
-            <span>Entering Patient Dashboard...</span>
-            <span className="text-cyan-400 font-bold">{countdown}s</span>
-          </div>
-          <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
-            <div 
-              className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full transition-all duration-1000 ease-linear rounded-full"
-              style={{ width: `${((3 - countdown) / 3) * 100}%` }}
-            />
-          </div>
-        </div>
+        {/* Direct Action Buttons - Non-time sensitive */}
+        <div className="space-y-3 pt-2">
+          <button
+            onClick={handleGoToDashboard}
+            id="enter-patient-portal-btn"
+            className="w-full py-3.5 px-6 rounded-xl font-bold font-mono text-sm bg-gradient-to-r from-[#00f2fe] via-cyan-400 to-[#4facfe] text-[#070b14] hover:opacity-95 shadow-[0_0_25px_rgba(0,242,254,0.35)] transition-all transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>Enter Patient Portal Directly</span>
+            <span className="text-lg">→</span>
+          </button>
 
-        {/* Direct Action Button */}
-        <button
-          onClick={handleGoToDashboard}
-          className="w-full py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-[#070b14] hover:opacity-95 shadow-[0_0_20px_rgba(0,242,254,0.3)] transition-all transform hover:-translate-y-0.5"
-        >
-          Go to Patient Dashboard Now →
-        </button>
+          <button
+            onClick={() => router.push('/')}
+            className="w-full py-2.5 px-4 rounded-xl text-xs font-mono text-gray-400 hover:text-white bg-gray-800/40 hover:bg-gray-800/70 border border-gray-700/60 transition-colors"
+          >
+            ← Return to Portal Select
+          </button>
+        </div>
 
       </div>
     </div>

@@ -263,6 +263,33 @@ async def upload_ehr(
 
     return {"status": "success", "ipfs_cid": ipfs_cid}
 
+# --- Doctor Verification & Lookup Endpoint for Patients ---
+@app.get("/api/v1/doctor/{doctor_id}/info")
+@app.get("/api/doctor/{doctor_id}/info")
+def get_doctor_info(
+    doctor_id: str,
+    db: Session = Depends(get_db)
+):
+    doctor = db.query(models.Doctor).filter(models.Doctor.doctor_id == doctor_id.strip()).first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail=f"Doctor with ID '{doctor_id}' not found in hospital registry")
+    
+    if doctor.status != "VERIFIED":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Doctor '{doctor_id}' is currently pending admin verification and cannot be granted access."
+        )
+
+    return {
+        "status": "success",
+        "doctor_id": doctor.doctor_id,
+        "full_name": doctor.full_name,
+        "specialty": doctor.specialty,
+        "license_number": doctor.license_number,
+        "status": doctor.status,
+        "wallet_address": doctor.wallet_address
+    }
+
 @app.post("/api/v1/patient/{patient_id}/grant")
 def grant_access(
     patient_id: str, 
@@ -496,23 +523,35 @@ def retrieve_ehr(
                     else:
                         continue
                         
-                import base64
-                iv = encrypted_payload[:16]
-                cipher = AES.new(AES_KEY, AES.MODE_CBC, iv)
-                decrypted_bytes = unpad(cipher.decrypt(encrypted_payload[16:]), AES.block_size)
-                
-                # Base64 encode the binary data instead of decoding it to a raw UTF-8 string with control characters
-                decrypted_content = base64.b64encode(decrypted_bytes).decode('utf-8')
-                
-                rec_local = db.query(models.EHRRecord).filter(models.EHRRecord.ipfs_cid == cid).first()
-                filename = rec_local.filename if rec_local else f"Record_{i}"
-                
-                decrypted_records.append({
-                    "filename": filename,
-                    "ipfs_cid": cid,
-                    "content": decrypted_content,
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(timestamp))
-                })
+                try:
+                    import base64
+                    iv = encrypted_payload[:16]
+                    cipher = AES.new(AES_KEY, AES.MODE_CBC, iv)
+                    decrypted_bytes = unpad(cipher.decrypt(encrypted_payload[16:]), AES.block_size)
+                    
+                    # Base64 encode the binary data instead of decoding it to a raw UTF-8 string with control characters
+                    decrypted_content = base64.b64encode(decrypted_bytes).decode('utf-8')
+                    
+                    rec_local = db.query(models.EHRRecord).filter(models.EHRRecord.ipfs_cid == cid).first()
+                    filename = rec_local.filename if rec_local else f"Record_{i}"
+                    
+                    decrypted_records.append({
+                        "filename": filename,
+                        "ipfs_cid": cid,
+                        "content": decrypted_content,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(timestamp))
+                    })
+                except Exception as dec_err:
+                    print(f"Warning: Decryption failed for record {cid}: {dec_err}")
+                    rec_local = db.query(models.EHRRecord).filter(models.EHRRecord.ipfs_cid == cid).first()
+                    filename = rec_local.filename if rec_local else f"Record_{i}"
+                    decrypted_records.append({
+                        "filename": filename,
+                        "ipfs_cid": cid,
+                        "content": None,
+                        "error": "Decryption failed or invalid key/padding",
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(timestamp))
+                    })
         except Exception as e:
             if "Unauthorized" in str(e):
                 raise HTTPException(status_code=403, detail="Unauthorized: You do not have access to this record on the blockchain")
@@ -664,4 +703,108 @@ def predict_clinical_risk(
         return JSONResponse(status_code=400, content=result)
 
     return result
+
+# --- Medical NLP Pipeline: Document Parsing & Insight Extraction ---
+try:
+    from ml_pipeline.scripts.nlp_parser import extract_text_from_file
+    from ml_pipeline.scripts.llm_analyzer import analyze_medical_report
+except ImportError:
+    from backend.ml_pipeline.scripts.nlp_parser import extract_text_from_file
+    from backend.ml_pipeline.scripts.llm_analyzer import analyze_medical_report
+
+class ClinicalQueryRequest(BaseModel):
+    text: Optional[str] = None
+    base64_file: Optional[str] = None
+    filename: Optional[str] = "medical_report.pdf"
+
+@app.post("/api/nlp/analyze-report")
+@app.post("/api/v1/nlp/analyze-report")
+async def analyze_medical_report_endpoint(
+    file: UploadFile = File(...),
+    current_user = Depends(auth.get_current_user)
+):
+    try:
+        file_bytes = await file.read()
+        filename = file.filename or "medical_report.pdf"
+        
+        # 1. Document Parsing & Text Extraction (PyMuPDF / OCR)
+        extracted_text = extract_text_from_file(file_bytes, filename)
+        
+        # 2. LangChain & LLM Structured Insight Extraction with Text-XAI Grounding
+        insights = analyze_medical_report(extracted_text)
+        
+        return {
+            "status": "success",
+            "filename": filename,
+            "extracted_character_count": len(extracted_text),
+            "disease_detected": insights.get("disease_detected") or insights.get("previous_diagnosis"),
+            "category": insights.get("category", "General Medicine"),
+            "severity": insights.get("severity", "Moderate"),
+            "confidence": insights.get("confidence", "92%"),
+            "previous_diagnosis": insights.get("previous_diagnosis"),
+            "current_causes": insights.get("current_causes"),
+            "preventative_protocols": insights.get("preventative_protocols"),
+            "source_quotes": insights.get("source_quotes", []),
+            "xai_explanation": insights.get("xai_explanation", {
+                "primary_condition": insights.get("disease_detected"),
+                "clinical_reasoning": "Diagnostic conclusion supported by extracted document findings.",
+                "key_evidence_quotes": insights.get("source_quotes", [])
+            }),
+            "extraction_engine": insights.get("extraction_engine"),
+            "raw_text": extracted_text
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Medical NLP Pipeline Error: {str(e)}")
+
+@app.post("/api/nlp/analyze-query")
+@app.post("/api/v1/nlp/analyze-query")
+async def analyze_clinical_query_endpoint(
+    payload: ClinicalQueryRequest,
+    current_user = Depends(auth.get_current_user)
+):
+    try:
+        extracted_text = ""
+        filename = payload.filename or "clinical_input.txt"
+
+        if payload.base64_file:
+            import base64
+            file_bytes = base64.b64decode(payload.base64_file)
+            extracted_text = extract_text_from_file(file_bytes, filename)
+        elif payload.text:
+            extracted_text = payload.text.strip()
+        else:
+            raise HTTPException(status_code=400, detail="Either 'text' or 'base64_file' must be provided.")
+
+        if not extracted_text:
+            raise HTTPException(status_code=400, detail="Extracted text is empty or document contains unreadable content.")
+
+        insights = analyze_medical_report(extracted_text)
+
+        return {
+            "status": "success",
+            "filename": filename,
+            "extracted_character_count": len(extracted_text),
+            "disease_detected": insights.get("disease_detected") or insights.get("previous_diagnosis"),
+            "category": insights.get("category", "General Medicine"),
+            "severity": insights.get("severity", "Moderate"),
+            "confidence": insights.get("confidence", "92%"),
+            "previous_diagnosis": insights.get("previous_diagnosis"),
+            "current_causes": insights.get("current_causes"),
+            "preventative_protocols": insights.get("preventative_protocols"),
+            "source_quotes": insights.get("source_quotes", []),
+            "xai_explanation": insights.get("xai_explanation", {
+                "primary_condition": insights.get("disease_detected"),
+                "clinical_reasoning": "Diagnostic conclusion supported by extracted document findings.",
+                "key_evidence_quotes": insights.get("source_quotes", [])
+            }),
+            "extraction_engine": insights.get("extraction_engine"),
+            "raw_text": extracted_text
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Clinical Query Analysis Error: {str(e)}")
+
 

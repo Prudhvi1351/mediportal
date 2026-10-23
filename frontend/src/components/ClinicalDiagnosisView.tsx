@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { GeneralDiseaseAiView } from './GeneralDiseaseAiView';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -147,6 +148,7 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
 }) => {
   const [doctorId, setDoctorId] = useState<string | null>(initialDoctorId || null);
   const [doctorToken, setDoctorToken] = useState<string | null>(initialDoctorToken || null);
+  const [aiMode, setAiMode] = useState<'general' | 'biopsy'>('general');
 
   // Doctor login modal state if not logged in
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -356,8 +358,45 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
         </div>
       </div>
 
-      {/* QUICK PRESET CONTROLS */}
-      <div className="bg-[#0f172a]/90 backdrop-blur border border-gray-800 rounded-2xl p-5 mb-8 shadow-xl">
+      {/* AI ENGINE MODE SELECTOR */}
+      <div className="flex flex-wrap items-center gap-2 mb-8 p-1.5 bg-[#070b14] rounded-2xl border border-gray-800 font-mono text-xs">
+        <button
+          type="button"
+          onClick={() => setAiMode('general')}
+          id="switch-general-ai-tab"
+          className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            aiMode === 'general'
+              ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-[#070b14] shadow-md'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <span className="text-base">🩺</span>
+          <span>Universal Disease & Condition AI (All Illnesses + Text-XAI)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setAiMode('biopsy')}
+          id="switch-biopsy-ai-tab"
+          className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            aiMode === 'biopsy'
+              ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <span className="text-base">🔬</span>
+          <span>Cell Biopsy Oncology Predictor (30-Feature ML + SHAP XAI)</span>
+        </button>
+      </div>
+
+      {aiMode === 'general' ? (
+        <GeneralDiseaseAiView 
+          doctorToken={doctorToken}
+          onBackToPortal={onBackToPortal}
+        />
+      ) : (
+        <>
+          {/* QUICK PRESET CONTROLS */}
+          <div className="bg-[#0f172a]/90 backdrop-blur border border-gray-800 rounded-2xl p-5 mb-8 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-2 py-1 rounded-md">
@@ -691,6 +730,8 @@ export const ClinicalDiagnosisView: React.FC<ClinicalDiagnosisViewProps> = ({
           </div>
         </div>
       </form>
+        </>
+      )}
 
       {/* Doctor Login Modal (if unauthenticated) */}
       {showLoginModal && (
