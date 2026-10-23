@@ -104,6 +104,9 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
     const pid = typeof targetPatientId === "string" ? targetPatientId : fetchInput;
     if (!pid.trim()) return alert("Please enter a Patient ID.");
 
+    // Dismiss the popup box immediately so user can see the animated fetching state behind
+    setShowFetch(false);
+
     setIsFetchingEHR(true);
     setPatientData(null);
     try {
@@ -113,7 +116,6 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
       const data = await res.json();
       if (res.ok) {
         setPatientData(data);
-        setShowFetch(false);
       } else {
         if (res.status === 401 || res.status === 403) {
           alert(`Doctor authentication session expired or invalid: ${data.detail || 'Please log in again.'}\nOpening login window to re-authenticate.`);
@@ -595,35 +597,43 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
       />
 
       {showFetch && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="card-bg p-8 rounded-2xl w-full max-w-sm border border-gray-700">
-            <h3 className="text-xl font-bold text-white mb-4">Query Patient Records</h3>
-            <input 
-              value={fetchInput} 
-              onChange={e => setFetchInput(e.target.value)} 
-              placeholder="Patient ID (e.g. P20A0105I)" 
-              className="input-dark w-full p-2.5 rounded-lg mb-4 font-mono text-sm" 
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowFetch(false)} className="text-gray-400 hover:text-white px-3 text-xs font-mono">Cancel</button>
-              <button 
-                disabled={isFetchingEHR || !fetchInput.trim()}
-                onClick={() => handleFetchEHR()} 
-                className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-500 text-white px-5 py-2 rounded-lg font-bold font-mono text-xs flex items-center gap-2 cursor-pointer shadow-md"
-              >
-                {isFetchingEHR ? (
-                  <>
-                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    <span>Fetching...</span>
-                  </>
-                ) : (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="card-bg p-8 rounded-2xl w-full max-w-sm border border-gray-700 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span>📋</span>
+              <span>Query Patient Records</span>
+            </h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (fetchInput.trim()) {
+                setShowFetch(false);
+                handleFetchEHR();
+              }
+            }}>
+              <input 
+                value={fetchInput} 
+                onChange={e => setFetchInput(e.target.value)} 
+                placeholder="Patient ID (e.g. P20A0105I)" 
+                autoFocus
+                className="input-dark w-full p-2.5 rounded-lg mb-4 font-mono text-sm focus:border-cyan-400 focus:outline-none" 
+              />
+              <div className="flex justify-end gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowFetch(false)} 
+                  className="text-gray-400 hover:text-white px-3 text-xs font-mono cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isFetchingEHR || !fetchInput.trim()}
+                  className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-500 text-white px-5 py-2 rounded-lg font-bold font-mono text-xs flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                >
                   <span>Fetch EHR</span>
-                )}
-              </button>
-            </div>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
