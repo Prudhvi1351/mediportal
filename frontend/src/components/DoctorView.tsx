@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { ClinicalDiagnosisView } from './ClinicalDiagnosisView';
 import { GeneralDiseaseAiView } from './GeneralDiseaseAiView';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from '../config/api';
 
 interface DoctorViewProps {
   setCurrentView: (view: 'landing' | 'patient' | 'doctor') => void;

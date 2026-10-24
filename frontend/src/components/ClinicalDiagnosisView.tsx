@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GeneralDiseaseAiView } from './GeneralDiseaseAiView';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from '../config/api';
 
 export const FEATURE_NAMES = [
   "mean radius",

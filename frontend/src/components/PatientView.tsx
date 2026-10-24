@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from '../config/api';
 
 interface PatientViewProps {
   setCurrentView: (view: 'landing' | 'patient' | 'doctor') => void;
