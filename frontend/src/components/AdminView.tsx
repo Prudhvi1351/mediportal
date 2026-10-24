@@ -44,7 +44,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ setCurrentView }) => {
                   <div className="text-sm text-gray-400 mt-1">License: {p.license_number} | Spec: {p.specialty} | App ID: {p.app_id}</div>
                   <div 
                     className="text-xs text-blue-400 mt-1 cursor-pointer hover:underline"
-                    onClick={() => window.open(`https://gateway.pinata.cloud/ipfs/${p.license_cid}`, "_blank")}
+                    onClick={() => window.open(`${API_URL}/api/v1/ipfs/${p.license_cid}`, "_blank")}
                   >
                     📄 View IPFS License Document (CID: {p.license_cid})
                   </div>

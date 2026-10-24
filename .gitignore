@@ -56,5 +56,7 @@ Thumbs.db
 # Local Database & Storage
 uploads/
 **/uploads/
+ipfs_storage/
+**/ipfs_storage/
 *.sqlite
 *.sqlite3

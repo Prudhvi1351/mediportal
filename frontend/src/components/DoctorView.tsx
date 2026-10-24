@@ -47,27 +47,63 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
 
   const [docForm, setDocForm] = useState({ full_name: '', specialty: '', age: '', email: '', phone: '', password: '', license_number: '' });
   const [docLicense, setDocLicense] = useState<File | null>(null);
+  const [docRegSuccess, setDocRegSuccess] = useState<{ app_id: string; email: string; full_name: string } | null>(null);
+  const [docRegError, setDocRegError] = useState<string | null>(null);
   const [loginForm, setLoginForm] = useState({ doctor_id: '', password: '' });
 
   const handleDocRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docLicense) return alert("License Document required!");
+    setDocRegError(null);
+
+    if (
+      !docForm.full_name.trim() ||
+      !docForm.specialty.trim() ||
+      !docForm.age ||
+      !docForm.email.trim() ||
+      !docForm.phone.trim() ||
+      !docForm.password ||
+      !docForm.license_number.trim()
+    ) {
+      const msg = "Please fill in all clinical registration fields.";
+      setDocRegError(msg);
+      return alert(msg);
+    }
+
+    if (!docLicense) {
+      const msg = "License / Certification document (PDF or image) is required!";
+      setDocRegError(msg);
+      return alert(msg);
+    }
+
     setIsDocRegistering(true);
     try {
       const fd = new FormData();
-      Object.entries(docForm).forEach(([k, v]) => fd.append(k, v));
+      Object.entries(docForm).forEach(([k, v]) => fd.append(k, typeof v === 'string' ? v.trim() : v));
       fd.append("license_file", docLicense);
 
-      const res = await fetch(`${API_URL}/api/v1/doctor/register`, { method: "POST", body: fd });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Application Submitted! Pending Admin Approval.\nApplication ID: ${data.app_id}\n\nA confirmation email has been sent to ${docForm.email}. Once hospital administration reviews and approves your credentials, you will receive your Doctor ID via email.`);
+      const targetApi = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : API_URL;
+      const res = await fetch(`${targetApi}/api/v1/doctor/register`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.app_id) {
+        setDocRegSuccess({
+          app_id: data.app_id,
+          email: docForm.email.trim(),
+          full_name: docForm.full_name.trim()
+        });
         setShowDocReg(false);
         setDocForm({ full_name: '', specialty: '', age: '', email: '', phone: '', password: '', license_number: '' });
         setDocLicense(null);
-      } else alert(data.detail || "Registration Failed");
+        setDocRegError(null);
+      } else {
+        const errorDetail = data.detail || (typeof data === 'string' ? data : "Registration Failed. Please check your data and retry.");
+        setDocRegError(errorDetail);
+        alert(errorDetail);
+      }
     } catch (err: any) {
-      alert("Registration failed: " + (err.message || err));
+      const errMsg = "Registration failed: " + (err.message || err);
+      setDocRegError(errMsg);
+      alert(errMsg);
     } finally {
       setIsDocRegistering(false);
     }
@@ -514,36 +550,149 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
       )}
 
       {showDocReg && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="card-bg p-8 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-gray-700">
-            <h3 className="text-2xl font-bold text-white mb-6">Clinical Verification Registration</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card-bg p-8 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-sky-500/30 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-2xl font-bold text-white">Clinical Verification Registration</h3>
+                <p className="text-xs text-sky-400 mt-0.5">Apply for decentralized practitioner credentials with cryptographic IPFS anchoring</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => { setShowDocReg(false); setDocRegError(null); }}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {docRegError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+                <svg className="w-4 h-4 shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{docRegError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleDocRegister} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-gray-400 text-sm">Full Name</label><input required className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, full_name: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Specialty</label><input required className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, specialty: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Age</label><input required type="number" className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, age: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Phone</label><input required type="tel" className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, phone: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Email</label><input required type="email" className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, email: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Password</label><input required type="password" className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, password: e.target.value })} /></div>
-                <div><label className="text-gray-400 text-sm">Medical License #</label><input required className="input-dark w-full p-2 rounded" onChange={e => setDocForm({ ...docForm, license_number: e.target.value })} /></div>
-                <div className="col-span-2"><label className="text-gray-400 text-sm">Upload Certificate/License (PDF/Image)</label>
-                  <input required type="file" className="text-white w-full p-2 border border-gray-600 rounded" onChange={e => setDocLicense(e.target.files?.[0] || null)} />
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Full Name</label>
+                  <input 
+                    required 
+                    value={docForm.full_name}
+                    placeholder="Dr. Jane Doe"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, full_name: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Specialty</label>
+                  <input 
+                    required 
+                    value={docForm.specialty}
+                    placeholder="Cardiology / Internal Medicine"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, specialty: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Age</label>
+                  <input 
+                    required 
+                    type="number" 
+                    min="21"
+                    max="100"
+                    value={docForm.age}
+                    placeholder="38"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, age: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Phone</label>
+                  <input 
+                    required 
+                    type="tel" 
+                    value={docForm.phone}
+                    placeholder="+1 555-0199"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, phone: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Email Address</label>
+                  <input 
+                    required 
+                    type="email" 
+                    value={docForm.email}
+                    placeholder="doctor@hospital.org"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, email: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Password</label>
+                  <input 
+                    required 
+                    type="password" 
+                    value={docForm.password}
+                    placeholder="••••••••"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500" 
+                    onChange={e => setDocForm({ ...docForm, password: e.target.value })} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Medical License / Registration #</label>
+                  <input 
+                    required 
+                    value={docForm.license_number}
+                    placeholder="LIC-MED-77492"
+                    className="input-dark w-full p-2.5 rounded-lg border border-slate-700 focus:border-sky-500 font-mono" 
+                    onChange={e => setDocForm({ ...docForm, license_number: e.target.value })} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider block mb-1">Upload License / Degree Certificate (PDF / Image)</label>
+                  <input 
+                    required 
+                    type="file" 
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="text-white w-full p-2.5 border border-slate-700 hover:border-sky-500 rounded-lg bg-slate-900/60 cursor-pointer text-sm" 
+                    onChange={e => setDocLicense(e.target.files?.[0] || null)} 
+                  />
+                  {docLicense && (
+                    <div className="mt-1.5 text-xs text-sky-400 flex items-center gap-1.5 font-mono">
+                      <span>✓ Document Loaded:</span>
+                      <span className="font-semibold text-slate-200">{docLicense.name}</span>
+                      <span className="text-slate-400">({(docLicense.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="flex justify-end gap-2 mt-4">
-                <button type="button" disabled={isDocRegistering} onClick={() => setShowDocReg(false)} className="text-gray-400 hover:text-white px-4 cursor-pointer">Cancel</button>
+
+              <div className="flex justify-end gap-3 mt-6 pt-2 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  disabled={isDocRegistering} 
+                  onClick={() => { setShowDocReg(false); setDocRegError(null); }} 
+                  className="text-gray-400 hover:text-white px-4 py-2 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
                 <button 
                   type="submit" 
                   disabled={isDocRegistering}
-                  className="bg-[#38bdf8] hover:bg-cyan-300 disabled:bg-gray-700 disabled:text-gray-400 text-[#0a0f1d] px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                  className="bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 disabled:from-slate-700 disabled:to-slate-700 disabled:text-gray-400 text-slate-950 px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-sky-500/20"
                 >
                   {isDocRegistering ? (
                     <>
-                      <svg className="animate-spin h-4 w-4 text-[#0a0f1d]" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-4 w-4 text-slate-950" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Uploading to IPFS...</span>
+                      <span>Anchoring Document to IPFS...</span>
                     </>
                   ) : (
                     <span>Submit Application</span>
@@ -551,6 +700,56 @@ export const DoctorView: React.FC<DoctorViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Registration Success Modal */}
+      {docRegSuccess && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card-bg p-8 rounded-2xl w-full max-w-md border border-sky-500/40 shadow-2xl animate-fade-in text-center">
+            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/40 shadow-lg shadow-emerald-500/10">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Application Submitted!</h3>
+            <p className="text-slate-300 text-sm mb-5">
+              Your clinical verification registration has been successfully anchored to decentralized IPFS and forwarded to hospital administration.
+            </p>
+
+            <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 mb-6 text-left space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400 uppercase tracking-wider font-semibold">Application Reference</span>
+                <span className="bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full font-mono font-bold text-[11px] border border-amber-500/30">
+                  PENDING APPROVAL
+                </span>
+              </div>
+              <div className="text-2xl font-mono font-bold text-sky-400 tracking-wider select-all">
+                {docRegSuccess.app_id}
+              </div>
+              <div className="text-xs text-slate-400 pt-2 border-t border-slate-800 leading-relaxed">
+                A verification notification has been sent to <span className="text-slate-200 font-semibold">{docRegSuccess.email}</span>. Once verified by admin, your official Doctor ID (<span className="font-mono text-cyan-400">DOC-XXXXX</span>) will be emailed to you.
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setDocRegSuccess(null);
+                  setShowDocLogin(true);
+                }}
+                className="flex-1 bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 text-slate-950 font-bold py-2.5 px-4 rounded-xl shadow-lg transition-all cursor-pointer"
+              >
+                Go to Doctor Login
+              </button>
+              <button
+                onClick={() => setDocRegSuccess(null)}
+                className="px-4 py-2.5 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -268,7 +268,7 @@ export default function AdminPage() {
                       {doc.license_cid && (
                         <div className="mt-3">
                           <a
-                            href={`https://gateway.pinata.cloud/ipfs/${doc.license_cid}`}
+                            href={`${API_URL}/api/v1/ipfs/${doc.license_cid}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:underline"
